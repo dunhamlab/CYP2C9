@@ -1,0 +1,1076 @@
+---
+title: "CYP2C9 analysis pipeline for activity and abundance scores"
+author: "Clara Amorosi"
+date: "2/11/2021"
+output: html_document
+---
+
+### Initial setup
+```{r Setup,include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+graphics.off()
+markdown_directory = getwd()
+```
+
+### Load required packages
+```{r Load_packages, message=FALSE, warning = FALSE}
+library(ggplot2)
+library(plyr)
+library(tidyr)
+library(dplyr)
+library(reshape)
+library(data.table)
+library(scales)
+library(GGally)
+library(grid)
+library(gridExtra)
+library(zoo)
+library(cowplot)
+library(ggrepel)
+library(dendextend)
+library(ggdendro)
+library(ComplexHeatmap)
+library(circlize)
+
+## The package versions used by the author
+packageVersion("ggplot2")     #‘3.3.2’
+packageVersion("plyr")     #‘1.8.6’
+packageVersion("tidyr")     #‘1.1.2’
+packageVersion("dplyr")     #‘1.0.2’
+packageVersion("reshape")     #‘0.8.8’
+packageVersion("data.table")     #‘1.13.0’
+packageVersion("scales")     #‘1.1.1’
+packageVersion("GGally")     #‘2.0.0’
+packageVersion("grid")     #‘3.6.3’
+packageVersion("gridExtra")     #2.3
+packageVersion("zoo")     #1.8.8
+packageVersion("cowplot")     #1.1.0
+packageVersion("ggrepel")     #0.8.2
+packageVersion("dendextend")     #1.14.0
+packageVersion("ggdendro")     #0.1.21
+packageVersion("ComplexHeatmap")     #2.2.0
+packageVersion("circlize")     #0.4.10
+```
+
+### Create universal changes to the baseline ggplot2 theme
+```{r Theme}
+theme_new = theme_set(theme_classic(base_size = 8))
+```
+
+### Get data
+```{r Load_data}
+# scores by variant
+CYP2C9_data = read.table(file = "data/CYP2C9_activity_abundance_scores.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+# median scores by position
+CYP2C9_positions = read.table(file = "data/CYP2C9_activity_abundance_positional_scores.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+```
+
+### Plot replicate score correlation matrix
+```{r Activity_score_correlation, warning=FALSE} 
+scatterplot_correlation_fxn = function(data, mapping, ...){
+  p = ggplot(data = data, mapping = mapping) + 
+    geom_point(alpha = 0.01) + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+  p
+}
+
+histogram_fxn = function(data, mapping, ...){
+  p = ggplot(data = data, mapping = mapping) + 
+    geom_histogram(aes(fill=class),alpha = 0.5, size=0.5,position="stack",color="black",bins = 20) + #binwidth=0.1
+  scale_fill_manual(values=c("missense"="grey","nonsense"="blue","synonymous"="red","wt"="black")) + 
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+  p
+}
+
+cyp_variants_min = CYP2C9_data[,c("class","activity_score1","activity_score2","activity_score4","activity_score5")]
+cyp_pearson_cor_matrix = as.matrix(cor(cyp_variants_min[,c("activity_score1","activity_score2","activity_score4","activity_score5")], use="pairwise.complete.obs", method = "pearson"))
+cyp_spearman_cor_matrix = as.matrix(cor(cyp_variants_min[,c("activity_score1","activity_score2","activity_score4","activity_score5")], use="pairwise.complete.obs", method = "spearman"))
+
+# Scatterplot matrix of activity replicates
+cyp_scatterplot_matrix_activity = ggpairs(cyp_variants_min,columns = c("activity_score1", "activity_score2", "activity_score4", "activity_score5"), 
+                                          lower = list(continuous = scatterplot_correlation_fxn),
+                                          diag = list(continuous = histogram_fxn),
+                                          columnLabels = c("score1", "score2", "score4","score5")) + 
+  xlab("Activity score") + ylab("Activity score") + 
+  theme_bw()+ 
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank()) 
+cyp_scatterplot_matrix_activity
+
+ggsave(file = "output/SF3_activity_replicate_scatterplot_matrix.pdf", plot = cyp_scatterplot_matrix_activity, device = "pdf", height =16, width = 18, units="cm")
+
+print(paste("Mean CYP2C9 replicate correlation, Pearson's r:",round(mean(cyp_pearson_cor_matrix[row(cyp_pearson_cor_matrix)!=col(cyp_pearson_cor_matrix)]),3)))
+print(paste("Mean CYP2C9 replicate correlation, Spearman's p:",round(mean(cyp_spearman_cor_matrix[row(cyp_spearman_cor_matrix)!=col(cyp_spearman_cor_matrix)]),3)))
+
+```
+
+```{r Abundance_score_correlation, warning=FALSE}
+cyp_variants_min = CYP2C9_data[,c("class","abundance_score2","abundance_score3","abundance_score6")]
+cyp_pearson_cor_matrix = as.matrix(cor(cyp_variants_min[,c("abundance_score2","abundance_score3","abundance_score6")], use="pairwise.complete.obs", method = "pearson"))
+cyp_spearman_cor_matrix = as.matrix(cor(cyp_variants_min[,c("abundance_score2","abundance_score3","abundance_score6")], use="pairwise.complete.obs", method = "spearman"))
+
+# Scatterplot matrix of abundance replicates
+cyp_scatterplot_matrix_abun = ggpairs(cyp_variants_min,columns = c("abundance_score2","abundance_score3","abundance_score6"), 
+                                          lower = list(continuous = scatterplot_correlation_fxn),
+                                          diag = list(continuous = histogram_fxn), 
+                                          columnLabels = c("score2", "score3","score6")) + 
+  xlab("Abundance score") + ylab("Abundance score") + 
+  theme_bw() + 
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+
+ggsave(file = "output/SF3_abundance_replicate_scatterplot_matrix.pdf", plot = cyp_scatterplot_matrix_abun, device = "pdf", height =12, width = 13.5, units="cm")
+
+print(paste("Mean CYP2C9 replicate correlation, Pearson's r:",round(mean(cyp_pearson_cor_matrix[row(cyp_pearson_cor_matrix)!=col(cyp_pearson_cor_matrix)]),3)))
+print(paste("Mean CYP2C9 replicate correlation, Spearman's p:",round(mean(cyp_spearman_cor_matrix[row(cyp_spearman_cor_matrix)!=col(cyp_spearman_cor_matrix)]),3)))
+
+cyp_scatterplot_matrix_abun
+
+```
+
+### Plot score histograms
+```{r Class_score_histogram, warning=FALSE}
+# Plot histogram of activity scores
+hist_plot_act = ggplot() +  geom_histogram(data = subset(CYP2C9_data, class != "wt"), aes(x = activity_score,fill=class), 
+                                            binwidth=0.05,alpha = 0.5, size=0.5,position="stack",color="black") +
+  scale_fill_manual(name="Class",values=c("missense"="grey","nonsense"="blue","synonymous"="red"),labels = c("Missense", "Nonsense", "Synonymous")) + 
+  geom_point(data = subset(CYP2C9_data, variant %in% c("R144C","I359L","C435H")), aes(x=activity_score,y=c(740,225,325)),color="black",size=1) +
+  geom_text(data = subset(CYP2C9_data, variant %in% c("R144C","I359L","C435H")),aes(x=activity_score,y=c(740,225,325),label=c("C435H","I359L","R144C")),
+            vjust=-1,size=2.5) + #hjust=-.2
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black",size=8),
+        axis.title=element_text(color = "black",size=9),
+        axis.ticks = element_line(color = "black"),
+        legend.position="none") +
+  scale_y_continuous(limits=c(0,800),expand=c(0,0)) + 
+  xlab("Activity score") + ylab("Count") 
+ggsave(file = "output/Fig1_activity_histogram.pdf", plot = hist_plot_act, device = "pdf", height =6.5, width = 9,units="cm")
+hist_plot_act
+
+# save legend separately
+legend = get_legend(
+  hist_plot_act + theme(legend.position = "right",legend.box.margin = margin(0, 0, 0, 0))
+)
+ggsave(file = "output/Fig1_activity_histogram_legend.pdf", plot = legend, device = "pdf", height =2.5, width = 3,units="cm")
+
+# Plot histogram of abundance scores
+hist_plot_abun = ggplot() + geom_histogram(data = subset(CYP2C9_data, class != "wt"), aes(x = abundance_score,fill=class),
+                                            binwidth=0.05,alpha = 0.5, size=0.5,position="stack",color="black") +
+  scale_fill_manual(name="Class",values=c("missense"="grey","nonsense"="blue","synonymous"="red"),labels = c("Missense", "Nonsense", "Synonymous")) +
+  geom_point(data = subset(CYP2C9_data, variant=="R335W"),aes(x=abundance_score,y=170),color="black",size=1) +
+  geom_text(data = subset(CYP2C9_data, variant=="R335W"),aes(x=abundance_score,y=170,label="R335W"),vjust=-1,size=2.5) +
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black",size=8),
+        axis.title=element_text(color = "black",size=9),
+        axis.ticks = element_line(color = "black"),
+        legend.position="none") +
+  scale_y_continuous(limits=c(0,600),expand=c(0,0)) + 
+  xlab("Abundance score")+ ylab("Count") 
+ggsave(file = "output/Fig3_abundance_histogram.pdf", plot = hist_plot_abun, device = "pdf", height =6.5, width = 9,units="cm")
+hist_plot_abun
+
+## making scatterplot of activity/abundance scores, missense variant only, get R-squared
+model = lm(activity_score~abundance_score, subset(CYP2C9_data,class=="missense"))
+rsquare = summary(model)$r.squared #0.560
+abun_act = ggplot() + 
+  geom_point(data =subset(CYP2C9_data, class=="missense"),aes(x=abundance_score,y=activity_score), shape=21,fill="grey40",color="black",alpha=0.4,na.rm = T,size=0.5,stroke=0.1) + 
+  scale_x_continuous(expand=c(0,0)) + 
+  theme_classic() + xlab("Abundance score") + ylab("Activity score") +
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8)) +
+  theme(legend.position = "none")
+ggsave(file = "output/Fig4_act_vs_abun_scatter.pdf", plot = abun_act, device = "pdf", height =5.5, width = 6.5,units="cm")
+abun_act
+
+CYP2C9_missense = subset(CYP2C9_data, class=="missense")
+print(paste("Correlation of activity score and abundance score, Pearson's r:",  round(cor(CYP2C9_missense$abundance_score,CYP2C9_missense$activity_score,
+                                                                                               use="pairwise.complete.obs", method="pearson"),3)))
+print(paste("Correlation of activity score and abundance score, Spearman's p:",  round(cor(CYP2C9_missense$abundance_score,CYP2C9_missense$activity_score,
+                                                                                               use="pairwise.complete.obs", method="spearman"),3)))
+```
+
+### CYP2C9 validation plots
+```{r Internal_validation, warning=FALSE}
+validation_data = read.table(file = "data/CYP2C9_validation_data.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+
+# Click-seq internal validation data, get averages, normalize to WT
+validation_data$click_avg = apply(validation_data[,c("click_rep1_raw","click_rep2_raw","click_rep3_raw")],1,mean)
+wt_avg = validation_data[validation_data$variant=="WT","click_avg"]
+validation_data$click_avg_norm = validation_data$click_avg/wt_avg
+validation_data$click_sd = apply(validation_data[,c("click_rep1_raw","click_rep2_raw","click_rep3_raw")],1,sd)/wt_avg
+validation_data$click_se = validation_data$click_sd/sqrt(3)
+
+merged_validation = join(CYP2C9_data,validation_data,by="variant", type="inner")
+model = lm(click_avg_norm~activity_score, merged_validation)
+rsquare = summary(model)$r.squared
+lb1 = paste("R^2 == ", round(rsquare,3))
+
+print(paste("Correlation of activity score and individual validation, Pearson's r:",  round(cor(merged_validation$click_avg_norm,merged_validation$activity_score,
+                                                                                              use="pairwise.complete.obs", method="pearson"),3)))
+
+# Plot linear fit of pooled vs individual click-seq activity scores
+click_plot = ggplot(merged_validation,aes(y=click_avg_norm,x=activity_score)) +
+  geom_smooth(method="lm", alpha=0.1,color="grey70", linetype="dashed",se=F) +
+  geom_errorbar(aes(y=click_avg_norm,xmin=activity_score-activity_se,xmax=activity_score+activity_se),color="black",width=0,size=0.5) + 
+  geom_errorbar(aes(x=activity_score,ymin=click_avg_norm-click_se,ymax=click_avg_norm+click_se),color="black",width=0,size=0.5) + 
+  geom_point(size=1.5,shape=21,color="black", fill="black",stroke=0.5) +
+  scale_y_continuous(breaks=c(0.25,0.5,0.75,1.0,1.25)) + 
+  scale_x_continuous(breaks=c(0,0.25,0.5,0.75,1.0)) + 
+  ylab("WT-normalized ABPP labeling (FITC)") + xlab("Activity score") + 
+  annotate("text", x=0.15, y=1.2, label=lb1, parse=TRUE,size = 3) + 
+  theme_classic() + theme(axis.text = element_text(color = "black",size=8),
+                          axis.ticks = element_line(color="black"),
+                          axis.title = element_text(color = "black",size=9)) 
+click_plot
+ggsave(file = "output/Fig1_validation_click_seq.pdf", plot = click_plot, device = "pdf", height =6.5, width = 9, units = "cm")
+
+# Plot linear fit of pooled vs individual VAMP-seq abundance scores
+merged_validation_vamp = subset(merged_validation,variant != "R150H") #only one replicate, exclude
+model = lm(vamp_avg~abundance_score, merged_validation_vamp)
+rsquare = summary(model)$r.squared
+lb2 = paste("R^2 == ", round(rsquare,3))
+merged_validation_vamp$vamp_se = merged_validation_vamp$vamp_sd/sqrt(2)
+
+vamp_plot = ggplot(merged_validation_vamp,aes(x=abundance_score,y=vamp_avg)) +
+  geom_smooth(method="lm", alpha=0.1,color="grey70", linetype="dashed",se=F) +
+  geom_errorbar(aes(y=vamp_avg,xmin=abundance_score-abundance_se,xmax=abundance_score+abundance_se),color="black",width=0, size=0.5) + 
+  geom_errorbar(aes(x=abundance_score,ymin=vamp_avg-vamp_se,ymax=vamp_avg+vamp_se),color="black",width=0,size=0.5) + 
+  geom_point(size=1.5,shape=21,color="black", fill="black",stroke=0.5) +
+  ylab("Mean eGFP:mCherry ratio") + xlab("Abundance score") + 
+  annotate("text", x=0.2, y=0.45, label=lb2, parse=TRUE,size = 3) + 
+  theme_classic() + theme(axis.text = element_text(color = "black",size=8),
+                          axis.ticks = element_line(color="black"),
+                          axis.title = element_text(color = "black",size=9)) 
+vamp_plot
+ggsave(file = "output/Fig3_validation_vamp_seq.pdf", plot = vamp_plot, device = "pdf", height =6.5, width = 9,units="cm")
+
+print(paste("Correlation of abundance score and internal validation, Pearson's r:",  round(cor(merged_validation_vamp$vamp_avg,merged_validation_vamp$abundance_score,
+                                                                                              use="pairwise.complete.obs", method="pearson"),3)))
+
+```
+
+```{r Activity_validation, warning=FALSE, fig.width=8}
+# Analyzing pooled Click-seq activity scores vs gold-standard LC-MS individual validation
+
+# plot S-warfarin data vs Click-seq activity
+set.seed(104)
+warf_activity = ggplot(merged_validation, aes(x=activity_score, y=warf_avg)) + 
+  geom_smooth(method="lm",color="grey80",alpha=0.1) + 
+  geom_point(size=1.5,shape=21,color="black", fill="grey40",stroke=0.5) +
+  geom_text_repel(aes(label = star_allele), color = "deepskyblue3",size=2) +
+  geom_text(x=1,y=-.2,label=paste("R^2 == ",round(summary(lm(warf_avg~activity_score, merged_validation))$r.squared,2)),size=2.5,parse=TRUE) + 
+  scale_x_continuous(expand = c(0,0),breaks = c(0,0.5,1.0), lim=c(-.1,1.2)) + 
+  scale_y_continuous(expand = c(0,0),breaks = c(0,0.5,1.0,1.5), lim=c(-.4,1.8)) + 
+  ylab("S-warfarin activity") + xlab("Activity score") +
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8)) 
+
+# Plot phenytoin data vs Click-seq activity
+set.seed(104)
+phen_activity = ggplot(merged_validation, aes(x=activity_score, y=phen_avg)) + 
+  geom_smooth(method="lm", alpha=0.1,color="grey80") +  
+  geom_point(size=1.5,shape=21,color="black", fill="grey40",stroke=0.5) +
+  geom_text_repel(aes(label = star_allele), color = "deepskyblue3",size=2) + 
+  geom_text(x=1,y=-.2,label=paste("R^2 == ",round(summary(lm(phen_avg~activity_score, merged_validation))$r.squared,2)),size=2.5,parse=TRUE) + 
+  scale_x_continuous(expand = c(0,0),breaks = c(0,0.5,1.0), lim=c(-.1,1.2)) + 
+  scale_y_continuous(expand = c(0,0),breaks = c(0,0.5,1.0,1.5), lim=c(-.4,1.8)) + 
+  ylab("Phenytoin activity") + xlab("Activity score") +
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8)) 
+
+# Combined activity validation plot
+combined_act_plot = plot_grid(warf_activity,phen_activity,
+                               align = 'h', nrow = 1,labels=c("a","b"),
+                               label_size = 12)
+ggsave(filename= "output/Fig2_validation_activity_plot.pdf",plot=combined_act_plot,width=18,height=7,units="cm")
+
+combined_act_plot
+
+print(paste("Correlation of activity score and S-warfarin activity, Pearson's r:",  round(cor(merged_validation$activity_score,merged_validation$warf_avg,
+                                                                                              use="pairwise.complete.obs", method="pearson"),3)))
+
+print(paste("Correlation of activity score and S-warfarin activity, Spearman's p:",  round(cor(merged_validation$activity_score,merged_validation$warf_avg,
+                                                                                               use="pairwise.complete.obs", method="spearman"),3)))
+
+print(paste("Correlation of activity scores and phenytoin activity, Pearson's r:",  round(cor(merged_validation$activity_score,merged_validation$phen_avg,
+                                                                                              use="pairwise.complete.obs", method="pearson"),3)))
+
+print(paste("Correlation of activity scores and phenytoin activity, Spearman's p:",  round(cor(merged_validation$activity_score,merged_validation$phen_avg,
+                                                                                               use="pairwise.complete.obs", method="spearman"),3)))
+# Plot BOMCC activity vs Click-seq activity
+set.seed(104)
+bomcc_act = ggplot(merged_validation, aes(x=activity_score, y=bomcc_norm_slope)) +
+  geom_smooth(method = "lm", alpha=0.1,color="grey") +
+  geom_point(size=1.5,shape=21,color="black", fill="grey40",stroke=0.5) +
+  geom_text_repel(aes(label = star_allele), color = "deepskyblue3",size=2) + 
+  geom_text(x=1,y=-.1,label=paste("R^2 == ",round(summary(lm(bomcc_norm_slope~activity_score, merged_validation))$r.squared,2)),size=2.5,parse=TRUE) + 
+  xlab("Activity score") + ylab("BOMCC activity") + 
+  scale_x_continuous(expand = c(0,0),breaks = c(0,0.5,1.0), lim=c(-.1,1.15)) + 
+  scale_y_continuous(expand = c(0,0),breaks = c(0,0.5,1.0,1.5,2.0), lim=c(-.3,2.05)) + 
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8))
+ggsave(filename="output/SF5_bomcc_validation.pdf",plot=bomcc_act,width=9,height=6,units="cm")
+bomcc_act
+
+print(paste("Correlation of activity score and BOMCC activity, Pearson's r:",  round(cor(merged_validation$activity_score,merged_validation$bomcc_norm_slope,
+                                                                                         use="pairwise.complete.obs",method="pearson"),3)))
+
+print(paste("Correlation of activity score and BOMCC activity, Spearman's p:",  round(cor(merged_validation$activity_score,merged_validation$bomcc_norm_slope,
+                                                                                          use="pairwise.complete.obs", method="spearman"),3)))
+
+# plot warfarin vs phenytoin LC-MS validation data
+set.seed(104)
+warf_phen = ggplot(merged_validation, aes(x=warf_avg, y=phen_avg)) +
+  geom_smooth(method = "lm", alpha=0.1,color="grey") +
+  geom_point(size=1.5,shape=21,color="black", fill="grey40",stroke=0.5) +
+  geom_text_repel(aes(label = star_allele), color = "deepskyblue3",size=2) + 
+  geom_text(x=1.2,y=-.1,label=paste("R^2 == ",round(summary(lm(phen_avg~warf_avg, merged_validation))$r.squared,2)),size=2.5,parse=TRUE) + 
+  xlab("S-warfarin activity") + ylab("Phenytoin activity") + 
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8))
+ggsave(filename= "output/SF4_warf_vs_phen_validation.pdf",plot=warf_phen,width=9,height=6,units="cm")
+warf_phen
+
+print(paste("Correlation of S-warfarin activity and phenytoin activity, Pearson's r:",  round(cor(merged_validation$warf_avg,merged_validation$phen_avg,
+                                                                                         use="pairwise.complete.obs",method="pearson"),3)))
+
+print(paste("Correlation of S-warfarin activity and phenytoin activity, Spearman's p:",  round(cor(merged_validation$warf_avg,merged_validation$phen_avg,
+                                                                                          use="pairwise.complete.obs", method="spearman"),3)))
+```
+
+```{r TAHA_plots, warning=FALSE}
+# Click probe optimization and sort data
+star_colors=c("WT"="#D73027","star2"="#FDAE61","star3"="#ABD9E9","C435H"="#4575B4")
+probe_data = read.table(file = "data/click_probe_optimization_data.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+probe_data$Concentration = as.factor(probe_data$Concentration)
+probe_data$Incubation = as.factor(probe_data$Incubation)
+probe_data$SampleID = factor(probe_data$SampleID, levels = c("WT", "star2", "star3","C435H"))
+
+aria_data = subset(probe_data,Instrument == "AriaIII" & Probe=="TAHA")
+# Plot sort geometric means from referene alleles
+summary_data = summarise(group_by(aria_data,SampleID,fill=SampleID), mean=mean(Geo_mean),sd=sd(Geo_mean))
+sort_taha_plot = ggplot() + 
+  geom_bar(data=summary_data, aes(y=mean,x=SampleID,fill=SampleID), stat="identity", width = 0.85, color="black",alpha=0.5) + 
+  geom_errorbar(data=summary_data, aes(y=mean,x=SampleID,ymin=mean-sd,ymax=mean+sd), width = 0.25) +
+  geom_jitter(data=aria_data,aes(x=SampleID,y=Geo_mean),color="blue",alpha=0.75,shape=21,width=0.25,size=1) +
+  xlab("CYP2C9 Allele") + ylab("Geometric Mean (AF488)") + 
+  scale_x_discrete(limits=c("WT","star2","star3","C435H"),labels=c("WT", "*2", "*3","C435H")) +
+  scale_fill_manual(values=star_colors) +
+  theme_classic() + 
+  theme(axis.text.x = element_text(color = "black",angle=0,hjust=0.5,vjust=0,size=7),
+        axis.text.y = element_text(color = "black",size=8),
+        axis.ticks = element_line(color="black"),
+        axis.title = element_text(color = "black",size=8),legend.position = "none")
+sort_taha_plot
+ggsave(file = paste("output/Fig1_TAHA_sort_probe_data.pdf",sep=""), plot = sort_taha_plot, device = "pdf", height =6.5, width = 9, units = "cm")
+
+# CYP2C9 allele optimization data with TAHA probe
+taha_data = subset(probe_data,Instrument == "LSRII" & Probe=="TAHA")
+# Plot geometric means from TAHA optimization
+summary_data = summarise(group_by(taha_data,SampleID,Concentration,Incubation), mean=mean(Geo_mean),sd=sd(Geo_mean))
+taha_opt_plot = ggplot() + 
+  geom_bar(data=summary_data, aes(x=Concentration,y=mean,fill=SampleID), position="dodge", stat="identity", color="black",alpha=0.5) + 
+  geom_errorbar(data=subset(summary_data,SampleID != "no_probe"), aes(x=Concentration,y=mean,ymin=mean-sd,ymax=mean+sd,fill=SampleID),
+                position = position_dodge(width = 0.9),width = 0.25) +
+  facet_grid(~Incubation, scales="free",space = "free_x",labeller = as_labeller(c('1'="1 hr",'2' = "2 hrs",'6'="6 hrs",'20'="20 hrs"))) +
+  xlab("TAHA (\U003BCM)") + ylab("Geometric Mean (FITC)") + 
+  scale_fill_manual(name="Allele", values=star_colors,labels=c("WT", "*2", "*3","C435H")) +
+  scale_y_continuous(limits=c(0,5800)) +
+  scale_y_continuous(expand=c(0,0),limits = c(0,6100),breaks = c(0,2000,4000,6000)) + 
+  theme(axis.text.x = element_text(color = "black",angle=0,hjust=0.5,vjust=0,size=8),
+        axis.text.y = element_text(color = "black",size=8),
+        axis.ticks = element_line(color="black"),
+        axis.title = element_text(color = "black"),legend.position = "none")
+
+opt_legend = get_legend(taha_opt_plot + theme(legend.position = "right",legend.box.margin = margin(0, 0, 0, 0),
+                                               legend.key.width = unit(0.4, "cm"),legend.key.height = unit(0.4, "cm"),))
+
+# CYP2C9 allele optimization data with ABP5 probe
+ABP5_data = subset(probe_data,Probe=="ABP5")
+summary_data = summarise(group_by(ABP5_data,SampleID,Concentration,Incubation), mean=mean(Geo_mean),sd=sd(Geo_mean))
+# Plot data from ABP5 data
+abp5_plot = ggplot() + 
+  geom_bar(data=summary_data, aes(x=Concentration,y=mean,fill=SampleID), position="dodge", stat="identity", color="black",alpha=0.5) + 
+  geom_errorbar(data=subset(summary_data,SampleID != "no_probe"), aes(x=Concentration,y=mean,ymin=mean-sd,ymax=mean+sd,fill=SampleID),
+                position = position_dodge(width = 0.9),width = 0.25) +
+  facet_grid(~Incubation, scales="free",space = "free_x",labeller = as_labeller(c('2'="2 hrs"))) +
+  xlab("ABP5 (\U003BCM)") + ylab("Geometric Mean (FITC)") + 
+  scale_fill_manual(name="Allele", values=star_colors,labels=c("WT", "*2", "*3","C435H")) +
+  scale_y_continuous(expand=c(0,0),limits = c(0,6100),breaks = c(0,2000,4000,6000)) + 
+  theme(axis.text.x = element_text(color = "black",angle=0,hjust=0.5,vjust=0,size=8),
+        axis.text.y = element_text(color = "black",size=8),
+        axis.ticks = element_line(color="black"),
+        axis.title = element_text(color = "black"),legend.position = "none")
+
+probe_optimization_plot = plot_grid(taha_opt_plot,abp5_plot,opt_legend,
+                               align = 'h', nrow = 1,labels=c("a","b",""),
+                               label_size = 12,rel_widths = c(13,3.5,1.5))
+probe_optimization_plot
+ggsave(file ="output/SF1_probe_optimization_figure.pdf", plot = probe_optimization_plot, device = "pdf", height =7, width = 18,units="cm")
+
+```
+
+### Heatmap pre-processing
+```{r Heatmap_pre-processing}
+CYP2C9_seq = "MDSLVVLVLCLSCLLLLSLWRQSSGRGKLPPGPTPLPVIGNILQIGIKDISKSLTNLSKVYGPVFTLYFGLKPIVVLHGYEAVKEALIDLGEEFSGRGIFPLAERANRGFGIVFSNGKKWKEIRRFSLMTLRNFGMGKRSIEDRVQEEARCLVEELRKTKASPCDPTFILGCAPCNVICSIIFHKRFDYKDQQFLNLMEKLNENIKILSSPWIQICNNFSPIIDYFPGTHNKLLKNVAFMKSYILEKVKEHQESMDMNNPQDFIDCFLMKMEKEKHNQPSEFTIESLENTAVDLFGAGTETTSTTLRYALLLLLKHPEVTAKVQEEIERVIGRNRSPCMQDRSHMPYTDAVVHEVQRYIDLLPTSLPHAVTCDIKFRNYLIPKGTTILISLTSVLHDNKEFPNPEMFDPHHFLDEGGNFKKSKYFMPFSAGKRICVGEALAGMELFLFLTSILQNFNLKSLVDPKNLDTTPVVNGFASVPPFYQLCFIPV"
+
+wtseqframe = data.frame("position" = seq(1,nchar(CYP2C9_seq)))
+wtseqframe$end = rep("NA",nchar(CYP2C9_seq))
+# assign WT aa at each position
+for (x in 1:nchar(CYP2C9_seq)){wtseqframe$end[x] = substr(CYP2C9_seq,x,x)}
+#all WT get same score at all positions
+wtseqframe$activity_score = CYP2C9_data[CYP2C9_data$class == "wt","activity_score"]
+wtseqframe$abundance_score = CYP2C9_data[CYP2C9_data$class == "wt","abundance_score"]
+
+CYP2C9_lower_bound_act = as.numeric(quantile(subset(CYP2C9_data, class == "missense")$activity_score, 0.1, na.rm = TRUE))
+CYP2C9_lower_bound_abun = as.numeric(quantile(subset(CYP2C9_data, class == "missense")$abundance_score, 0.1, na.rm = TRUE))
+
+position_vector = seq(1:nchar(CYP2C9_seq))
+aa_vector = c("A","V","I","L","M","F","Y","W","S","T","N","Q","C","G","P","R","H","K","D","E","X")
+#Make list of all position x variants: 1A 2A etc, 10290 elements for 2C9
+full_combinations = as.vector(outer(position_vector, aa_vector, paste, sep=""))
+
+# get missing positions in activity data: 
+missing_combinations_act = data.frame("variant" = full_combinations[!(full_combinations %in% substr(subset(CYP2C9_data, !is.na(activity_score))$variant,2,10))])
+missing_combinations_act$position = gsub("[^0-9]","",missing_combinations_act$variant)
+missing_combinations_act$position = as.numeric(missing_combinations_act$position)
+missing_combinations_act$end = gsub("[0-9]","",missing_combinations_act$variant)
+missing_combinations_act$end = factor(missing_combinations_act$end, levels = c("A","V","I","L","M","F","Y","W","S","T","N","Q","C","G","P","R","H","K","D","E","X"))
+
+# do the same with abundance data
+missing_combinations_abun = data.frame("variant" = full_combinations[!(full_combinations %in% substr(subset(CYP2C9_data, !is.na(abundance_score))$variant,2,10))])
+missing_combinations_abun$position = gsub("[^0-9]","",missing_combinations_abun$variant)
+missing_combinations_abun$position = as.numeric(missing_combinations_abun$position)
+missing_combinations_abun$end = gsub("[0-9]","",missing_combinations_abun$variant)
+missing_combinations_abun$end = factor(missing_combinations_abun$end, levels = c("A","V","I","L","M","F","Y","W","S","T","N","Q","C","G","P","R","H","K","D","E","X"))
+
+CYP2C9_subset = subset(CYP2C9_data, (class == "missense" | class == "nonsense"))
+```
+
+### CYP2C9 secondary structure schematic
+```{r Structure_ploy, warning=FALSE}
+# Plot secondary structure schematic, structure annotations from Wester 2004 structure paper
+struct_1r9o_helix = read.table(file = "data/sstruct_1r9o_helix.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE,quote="\"")
+struct_1r9o_sheet = read.table(file = "data/sstruct_1r9o_sheet.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+
+ss_plot = ggplot() + 
+  geom_segment(aes(x = 1, y = 0, xend = 490, yend = 0), size = 2, color = "grey50") + #,lineend="round"
+  geom_segment(aes(x = 18, y = 0, xend = 490, yend = 0), size = 4, color = "black") +
+  geom_segment(data = struct_1r9o_sheet, aes(x = start, xend=end, y = 0, yend=0), color = "cyan", size = 3) +
+  geom_segment(data = struct_1r9o_helix, aes(x = start, xend=end, y = 0, yend=0), color = "magenta", size = 3) + 
+  geom_text(data = struct_1r9o_helix,aes(x=((start+end)/2),y=0,vjust=0.5, label=name),size=2,color="grey90") + 
+  scale_x_reverse(breaks = NULL , expand = c(0,0), limits=c(491,0)) + 
+  xlab(NULL) + ylab(NULL) +
+  theme(legend.position = "none",
+        axis.line = element_blank(),axis.text = element_blank(),axis.ticks = element_blank(),
+        plot.margin = margin(1,1,1,1, "pt")) + #
+  coord_flip()
+
+```
+
+### CYP2C9 activity and abundance score heatmaps
+```{r Activity_heatmap,warning=FALSE}
+# Activity heatmap plot
+heatmap_act = ggplot() + 
+  geom_tile(data = missing_combinations_act, aes(x = position, y = end), fill = "grey50") +
+  geom_tile(data = subset(CYP2C9_subset, activity_score <= 0.1), aes(x = position, y = end), fill = "blue") +
+  geom_tile(data = subset(CYP2C9_subset, activity_score > 0.1), aes(x=position, y = end, fill = activity_score)) +
+  geom_tile(data = wtseqframe, aes(x = position, y= end, fill = activity_score)) +
+  geom_point(data = wtseqframe, aes(x = position, y = end),color="black",size = 0.15) +
+  scale_x_reverse(limits=c(491,0), expand = c(0,0), breaks = rev(c(1,seq(10,490,10)))) +
+  ylab("Activity") + xlab("Position") +
+  scale_fill_gradientn(name="Score",colours = c("blue","white","red"),
+                       values = rescale(c(0.1,1,2)), breaks=c(0.5,1.0,1.5), 
+                       limits=c(0,2),
+                       guide = guide_colorbar(frame.colour = "black")) +
+     theme(panel.background = element_rect(fill = "white"), legend.position = "none", 
+        axis.text = element_text(size = 7, color="black"), 
+        axis.title = element_text(size= 8, color="black"), 
+        axis.ticks = element_line(color="black"),
+        panel.border = element_rect(colour = "black", fill=NA)) +
+  coord_flip()
+
+```
+
+```{r abundance_heatmap,WARNING=FALSE,fig.height=10,fig.width=8}
+# Abundance heatmap plot
+heatmap_abun = ggplot() + 
+  geom_tile(data = missing_combinations_abun, aes(x = position, y = end), fill = "grey50") + 
+  geom_tile(data = subset(CYP2C9_subset, abundance_score <= 0.1), aes(x = position, y = end), fill = "blue") + 
+  geom_tile(data = subset(CYP2C9_subset, abundance_score > 0.1), aes(x=position, y = end, fill = abundance_score)) + 
+  geom_tile(data = wtseqframe, aes(x = position, y= end, fill = abundance_score)) + 
+  geom_point(data = wtseqframe, aes(x = position, y = end),color="black",size = 0.15) + 
+  scale_x_reverse(limits=c(491,0), expand = c(0,0), breaks = rev(c(1,seq(10,490,10)))) +
+  ylab("Abundance") + xlab(NULL) + 
+  scale_fill_gradientn(name="Score",colours = c("blue","white","red"),
+                       values = rescale(c(0.1,1,2)), breaks=c(0,0.5,1.0,1.5,2.0), 
+                       limits=c(0,2),
+                       guide = guide_colorbar(frame.colour = "black",ticks.colour = "black")) +
+     theme(panel.background = element_rect(fill = "white"), legend.position = "none", 
+           axis.ticks.y = element_blank(),
+           axis.text.y = element_blank(),
+           axis.text.x = element_text(size = 7, color="black"), 
+           axis.title = element_text(size= 8, color="black"), 
+           axis.ticks.x = element_line(color="black"),
+           panel.border = element_rect(colour = "black", fill=NA)) +
+  coord_flip()
+legend = get_legend(heatmap_abun + theme(legend.position = "bottom",legend.key.height = unit(0.3, "cm") , legend.box.margin = margin(0, 0, 0, 0),legend.text=element_text(size=8)))
+ggsave(file = "output/Fig4_heatmap_legend.pdf", plot = legend, device = "pdf", height =1.5, width = 4.5,unit="cm")
+
+combined_heatmap = plot_grid(ss_plot,heatmap_act,heatmap_abun, align = 'h', nrow = 1,rel_widths =c(1,6,5.25))
+combined_heatmap
+ggsave(file = "output/Fig4_heatmaps_figure.pdf", plot = combined_heatmap, device = "pdf", height =20, width = 12.25,units="cm")
+
+```
+
+```{r pymol_scores, echo=FALSE}
+# Create a vector of commands common to all pymol scripting I'll be doing
+pymol_setup <- c()
+# Import the PDB and do initial setup steps (flurbiprofen structure)
+pymol_setup <- append(pymol_setup, c("reinitialize","fetch 1r9o, async = 0","bg_color white","set opaque_background, 0","hide all","set ray_trace_mode, 1"))
+# Create individual objects for CYP2C9 and the substrate. not HEM/FLP/GOL/HOH (heme/flurbiprogen/glycerol/water)
+pymol_setup <- append(pymol_setup, c("create CYP2C9, not resn FLP and not resn HOH and not resn HEM and not resn GOL","create substrate, resn FLP","create heme, resn HEM","delete 1r9o","color atomic", "color yellow, element Fe","color grey20, elem c","color grey80, CYP2C9","color chartreuse, substrate","show sticks, substrate","show sticks, heme","set_bond stick_radius, 1, substrate","set_bond stick_radius, 1, heme","show cartoon, CYP2C9","orient CYP2C9","set caroon_fancy_helices, 1", "set cartoon_loop_radius, 0.5"))
+# Set the view to a common useful orientation
+cyp2c9_standard_view_1<-c("orient CYP2C9","set_view (0.492775291,0.807114303,-0.325165033,-0.007428105,0.377574384,0.925947309,0.870122373,-0.453868479,0.192054197, 0.000000000, 0.000000000, -221.186416626, 2.766113281,25.603586197,-0.379867554,174.385055542,267.987792969,-20.000000000)")
+cyp2c9_standard_view_2<-c("orient CYP2C9","set_view (-0.112286709,-0.047932234,-0.992517591,-0.027057577,0.998609602,-0.045165326,0.993305326,0.021781651,-0.113430239,0.000000000,    0.000000000,-221.186416626,2.766113281,25.603586197,-0.379867554,174.385055542,267.987792969,-20.000000000)")
+
+# Set up color scheme
+colorscheme = c("#0000FF","#3333FF","#6666FF","#9999FF","#FFFFFF","#FF9999")
+pymol_colorframe <- data.frame(hex=colorscheme)
+pymol_colorframe$r <- NA
+pymol_colorframe$g <- NA
+pymol_colorframe$b <- NA
+
+for(x in 1:nrow(pymol_colorframe)){
+  pymol_colorframe$r[x] <- col2rgb(pymol_colorframe$hex[x])[1]
+  pymol_colorframe$g[x] <- col2rgb(pymol_colorframe$hex[x])[2]
+  pymol_colorframe$b[x] <- col2rgb(pymol_colorframe$hex[x])[3]
+}
+
+pymol_color_setup_vector <- c()
+for(x in 1:nrow(pymol_colorframe)){
+  pymol_color_setup_vector <- append(pymol_color_setup_vector, paste("set_color ",pymol_colorframe$hex[x],", [",pymol_colorframe$r[x],",",pymol_colorframe$g[x],",",pymol_colorframe$b[x],"]",sep=""))
+}
+
+# Generate scripts to color structure by median activity/abundance score at each position
+pymol_activity_score_vector <- c()
+for(x in 1:nrow(CYP2C9_positions)){
+  if (!is.na(CYP2C9_positions$act_score[x])) {
+    if (CYP2C9_positions$act_score[x] < 0.2){ #blue
+      pymol_activity_score_vector <- append(pymol_activity_score_vector, paste("color #0000FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$act_score[x] < 0.4){
+      pymol_activity_score_vector <- append(pymol_activity_score_vector, paste("color #3333FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$act_score[x] < 0.6){
+      pymol_activity_score_vector <- append(pymol_activity_score_vector, paste("color #6666FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$act_score[x] < 0.8){
+      pymol_activity_score_vector <- append(pymol_activity_score_vector, paste("color #9999FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$act_score[x] <= 1.0){ #white
+      pymol_activity_score_vector <- append(pymol_activity_score_vector, paste("color #FFFFFF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else { #pink
+      pymol_activity_score_vector <- append(pymol_activity_score_vector, paste("color #FF9999, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+  }
+}
+fileConn<-file("output/pymol_cyp2c9_activity_color.pml")
+writeLines(c(pymol_setup,"color grey40, CYP2C9",cyp2c9_standard_view_1,pymol_color_setup_vector,pymol_activity_score_vector,paste("png ", "pymol/1r9o_cyp2c9_activity_scores_view1.png, width=10cm, dpi=300, ray=1",sep="")), fileConn)
+close(fileConn)
+
+pymol_abundance_score_vector <- c()
+for(x in 1:nrow(CYP2C9_positions)){
+  if (!is.na(CYP2C9_positions$abun_score[x])) {
+    if (CYP2C9_positions$abun_score[x] < 0.2){ #blue
+      pymol_abundance_score_vector <- append(pymol_abundance_score_vector, paste("color #0000FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$abun_score[x] < 0.4){
+      pymol_abundance_score_vector <- append(pymol_abundance_score_vector, paste("color #3333FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$abun_score[x] < 0.6){
+      pymol_abundance_score_vector <- append(pymol_abundance_score_vector, paste("color #6666FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$abun_score[x] < 0.8){
+      pymol_abundance_score_vector <- append(pymol_abundance_score_vector, paste("color #9999FF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else if (CYP2C9_positions$abun_score[x] <= 1.0){ #white
+      pymol_abundance_score_vector <- append(pymol_abundance_score_vector, paste("color #FFFFFF, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+    else { #pink
+      pymol_abundance_score_vector <- append(pymol_abundance_score_vector, paste("color #FF9999, resi ", CYP2C9_positions$position[x], " and CYP2C9",sep=""))
+    }
+  }
+}
+
+fileConn<-file("output/pymol_cyp2c9_abundance_color.pml")
+writeLines(c(pymol_setup,"color grey40, CYP2C9",cyp2c9_standard_view_1,pymol_color_setup_vector,pymol_abundance_score_vector,paste("png ", "pymol/1r9o_cyp2c9_abundance_scores_view1.png, width=10cm, dpi=300, ray=1",sep="")), fileConn)
+close(fileConn)
+
+# Highlight positions with the lowest 2.5% median specific activity scores
+pymol_spec_scores <- c()
+spec_25_percent = subset(CYP2C9_positions, spec_score < quantile(CYP2C9_positions$spec_score, 0.025, na.rm = TRUE))$position #11 positions
+pymol_spec_scores <- append(pymol_spec_scores, paste("create lowest_spec, CYP2C9 and resi ",gsub(", ","+",toString(spec_25_percent)),"", sep= ""))
+pymol_spec_scores <- append(pymol_spec_scores, c("hide cartoon, lowest_spec","color red, lowest_spec","show spheres, lowest_spec"))
+pymol_spec_scores <- append(pymol_spec_scores, c("orient CYP2C9","hide cartoon, CYP2C9 and i. 192-253")) 
+pymol_spec_scores <- append(pymol_spec_scores, c("set_view (-0.868709862,    0.217583776,   -0.444945514,0.057252310,    0.936421692,    0.346158624,0.491980046,    0.275240242,   -0.825944066,0.000000000,    0.000000000, -141.782043457,2.765857697,   25.603263855,   -0.379856110,111.782043457,  171.782043457,  -20.000000000 )")) 
+fileConn<-file("output/pymol_cyp2c9_specific_activity_lowest_25_percent.pml")
+writeLines(c(pymol_setup,pymol_spec_scores,paste("png ","pymol/1r9o_cyp2c9_spec_activity_2point5_percent_zoomed.png, width=10cm, height=8cm dpi=500, ray=1",sep="")), fileConn)
+close(fileConn)
+
+```
+
+### Score categorization
+```{r Activity_classes, warning=FALSE, fig.height = 4}
+custom_colorscale = c("nonsense-like" = "#BB00FF","possibly_nonsense-like" = "#A47EFF","decreased" = "#3366ff","possibly_decreased" = "#b3d9ff","possibly_wt-like" = "#ffcccc","wt-like" = "#F8766D","increased" = "orange","unknown" = "grey75")
+synonymous_lowest = quantile(subset(CYP2C9_data, class == "synonymous")$activity_score, 0.05, na.rm = TRUE) 
+nonsense_highest = quantile(subset(CYP2C9_data, class == "nonsense" & position < 441)$activity_score, 0.95, na.rm = TRUE)
+
+# Plot stacked histogram of classes for activity score
+category_histogram_act = ggplot() + 
+  geom_histogram(data = subset(CYP2C9_data, class == "missense"), 
+                 aes(x = activity_score, fill = factor(activity_class, levels = c("increased","wt-like","possibly_wt-like","possibly_decreased","decreased",
+                                                                                  "possibly_nonsense-like","nonsense-like"))), 
+                 bins=20, alpha = 0.75, position="stack", color = "black") + 
+  geom_vline(xintercept = synonymous_lowest, linetype = 2) + 
+  geom_vline(xintercept = nonsense_highest, linetype = 2) + 
+  scale_y_continuous(expand=c(0,0),limits = c(0,1100)) + 
+  xlab("Activity score") + ylab("Count") + labs(fill = "Activity class") + 
+  scale_fill_manual(values = custom_colorscale, labels=c("Increased","WT-like","Possibly WT-like", "Possibly decreased", 
+                                                         "Decreased", "Possibly nonsense-like", "Nonsense-like"), name="Class") + 
+  theme(axis.text = element_text(color="black",size = 7),
+        axis.title = element_text(color="black",size = 8),
+        legend.position = "none")
+
+# Plot stacked histogram of classes for abundance score
+synonymous_lowest_abun = quantile(subset(CYP2C9_data, !is.na(abundance_score) & class == "synonymous")$abundance_score, 0.05, na.rm = TRUE)
+nonsense_highest_abun = quantile(subset(CYP2C9_data, !is.na(abundance_score) & class == "nonsense" & position > 49 & position < 441)$abundance_score, 0.95, na.rm = TRUE)
+# Plot stacked histogram of classes for abundance score 
+category_histogram_abun = ggplot() + 
+  geom_histogram(data = subset(CYP2C9_data, class == "missense"), 
+                 aes(x = abundance_score, fill = factor(abundance_class, levels = c("increased","wt-like","possibly_wt-like","possibly_decreased","decreased",
+                                                                                    "possibly_nonsense-like","nonsense-like"))),
+                 bins=20, alpha = 0.75, position="stack", color = "black") + 
+  geom_vline(xintercept = synonymous_lowest_abun, linetype = 2) + 
+  geom_vline(xintercept = nonsense_highest_abun, linetype = 2) +
+  scale_y_continuous(expand=c(0,0),limits = c(0,1100)) + 
+  xlab("Abundance score") + ylab("Count") + labs(fill = "Abundance class") + 
+  scale_fill_manual(values = custom_colorscale, labels=c("increased","WT-like","possibly WT-like", "possibly decreased", 
+                                                         "decreased", "possibly nonsense-like", "nonsense-like"), name="Class") + 
+  theme(axis.text = element_text(color="black",size = 7),
+        axis.title = element_text(color="black",size = 8),
+        legend.position = "none")
+
+legend = get_legend(
+  category_histogram_act + theme(legend.position = "right",legend.box.margin = margin(0, 0, 0, 0),legend.key.width = unit(0.5, "cm"),
+                                 legend.key.height = unit(0.5, "cm"),legend.text=element_text(size=7))
+)
+combined_category_plot = plot_grid(category_histogram_act,category_histogram_abun,legend,
+                               align = 'h', nrow = 1,labels=c("a","b",""),
+                               label_size = 12,rel_widths = c(7.25,7.25,3.5))
+combined_category_plot
+ggsave(file = "output/SF7_score_categorization_histograms.pdf", plot = combined_category_plot, device = "pdf", height =7, width = 18,units="cm")
+
+```
+
+### Hierarchical clustering
+```{r Hierarchical_clustering, warning=FALSE}
+# Cluster activity and abudance scores by position
+
+# Data wrangling of activity/abundance scores:
+clustering_data=CYP2C9_data[CYP2C9_data$class=="missense",] %>%
+  group_by(position)
+col_order = c("A","V","I","L","M","F","Y","W","S","T","N","Q","C","G","P","R","H","K","D","E")
+clustering_abun=dplyr::select(clustering_data,position,end,abundance_score)
+clustering_abun$position=as.factor(clustering_abun$position)
+clustering_abun_wide=spread(clustering_abun, end, abundance_score)
+clustering_abun_wide=as.data.frame(clustering_abun_wide)
+row.names(clustering_abun_wide)=clustering_abun_wide$position
+clustering_abun_wide=clustering_abun_wide[,2:21]
+clustering_abun_wide = clustering_abun_wide[, col_order]
+clustering_act=dplyr::select(clustering_data,position,end,activity_score)
+clustering_act$position=as.factor(clustering_act$position)
+clustering_act_wide=spread(clustering_act, end, activity_score)
+clustering_act_wide=as.data.frame(clustering_act_wide)
+row.names(clustering_act_wide)=clustering_act_wide$position
+clustering_act_wide=clustering_act_wide[,2:21]
+clustering_act_wide = clustering_act_wide[, col_order]
+# change activity column names to be unique from abundance data frame
+colnames(clustering_act_wide) = paste(colnames(clustering_act_wide), "act", sep = "")
+# Merge activity and abundance datasets
+clustering_data_wide = merge(clustering_abun_wide,clustering_act_wide,by="row.names",all=TRUE)
+row.names(clustering_data_wide)=clustering_data_wide$Row.names
+clustering_data_wide=clustering_data_wide[,2:41]
+# Remove positions with not enough mutations
+clustering_data_wide = clustering_data_wide[rowSums(is.na(clustering_data_wide)) < 26, ]
+colnames(clustering_data_wide) = c("A","V","I","L","M","F","Y","W","S","T","N","Q","C","G","P","R","H","K","D","E","A","V","I","L","M","F","Y","W","S","T","N","Q","C","G","P","R","H","K","D","E")
+
+clustering_mat = data.matrix(clustering_data_wide)
+col_fun = colorRamp2(c(0.1, 1, 2), c("blue", "white", "red"))
+
+pdf("output/Fig5_CYP2C9_clustering_figure.pdf",width=5,height=7.87)
+heatmap_plot = Heatmap(clustering_mat, cluster_columns=FALSE, col=col_fun, show_row_names = FALSE, row_split = 6, 
+        name = "Score",column_split = c(rep("Abundance", 20), rep("Activity",20)),column_title_side = "bottom",
+        column_title_gp = gpar(fontsize = 9),
+        border = TRUE,row_title = NULL,
+        column_names_rot = 360, column_names_centered = TRUE,
+        column_names_gp = gpar(fontsize = 8),
+        left_annotation = rowAnnotation(foo = anno_block(gp = gpar(fill = c("#376CAF","#7348A0","#B2258E","#F0027E","#CE3D38","#C07C17"),fontsize=9),
+        labels = c("1","2","3","4","5","6"),
+        labels_rot = 360,
+        labels_gp = gpar(col = "white", fontsize = 9))))
+heatmap_plot
+dev.off()
+
+# Get cluster info: 
+cluster_assignments = row_order(heatmap_plot)
+cluster1 = as.numeric(rownames(clustering_mat[cluster_assignments[[1]],]))
+cluster2 = as.numeric(rownames(clustering_mat[cluster_assignments[[2]],]))
+cluster3 = as.numeric(rownames(clustering_mat[cluster_assignments[[3]],]))
+cluster4 = as.numeric(rownames(clustering_mat[cluster_assignments[[4]],]))
+cluster5 = as.numeric(rownames(clustering_mat[cluster_assignments[[5]],]))
+cluster6 = as.numeric(rownames(clustering_mat[cluster_assignments[[6]],]))
+cluster_frame = data.frame("position" = c(cluster1,cluster2,cluster3,cluster4,cluster5,cluster6),
+                           "cluster" = c(rep(1,length(cluster1)),rep(2,length(cluster2)),rep(3,length(cluster3)),rep(4,length(cluster4)),rep(5,length(cluster5)),rep(6,length(cluster6))))
+
+# Get relative solvent accessibility data and make boxplot of cluster RSA
+rsa_data = read.table(file = "data/CYP2C9_rsa_data.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+merged_dssp = join(cluster_frame,rsa_data, by="position", type="left")
+merged_dssp$cluster = as.factor(merged_dssp$cluster)
+rsa_boxplot = ggplot(merged_dssp, aes(cluster, rsa)) + geom_boxplot(aes(fill=cluster),color="black",lwd=0.5) + 
+  ylab("Relative\n solvent accessibility") + xlab("Cluster") + 
+  scale_x_discrete(labels = c("1","2","3","4","5","6")) + 
+  scale_fill_manual(values=c("#376CAF","#7348A0","#B2258E","#F0027E","#CE3D38","#C07C17"))+
+  theme_classic() +
+  theme(legend.position="none",
+        axis.text = element_text(size=7,color="black"), 
+        axis.ticks = element_line(color="black"),
+        axis.title = element_text(size=7,color="black"))
+rsa_boxplot
+ggsave("output/Fig5_cluster_rsa.pdf", rsa_boxplot,device = "pdf",height =4,width=5.5,units="cm")
+
+```
+
+```{r Pymol_clustering, echo=FALSE}
+# Highligh each of the six groups from hierarchical clustering on CYP2C9 structue, each a different color
+# Cluster 1
+pymol_cluster = c()
+pymol_cluster <- append(pymol_cluster, "set_color #376CAF, [55,108,175]")
+pymol_cluster <- append(pymol_cluster, paste("create cluster, CYP2C9 and resi ",gsub(", ","+",toString(cluster1)),"", sep= ""))
+pymol_cluster <- append(pymol_cluster, c("hide cartoon, cluster","color #376CAF, cluster","show spheres, cluster")) 
+temp1 = c(pymol_setup,pymol_cluster,cyp2c9_standard_view_1,paste("png ","pymol/1r9o_cyp2c9_cluster1_view1.png, width=10cm, dpi=500, ray=1",sep=""),cyp2c9_standard_view_2, paste("png ","pymol/1r9o_cyp2c9_cluster1_view2.png, width=10cm, dpi=500, ray=1",sep=""))
+
+# Cluster 2 
+pymol_cluster = c()
+pymol_cluster <- append(pymol_cluster, "set_color #7348A0, [115,72,160]")
+pymol_cluster <- append(pymol_cluster, paste("create cluster, CYP2C9 and resi ",gsub(", ","+",toString(cluster2)),"", sep= ""))
+pymol_cluster <- append(pymol_cluster, c("hide cartoon, cluster","color #7348A0, cluster","show spheres, cluster")) 
+temp2= c(pymol_setup,pymol_cluster,cyp2c9_standard_view_1,paste("png ","pymol/1r9o_cyp2c9_cluster2_view1.png, width=10cm, dpi=500, ray=1",sep=""),cyp2c9_standard_view_2, paste("png ","pymol/1r9o_cyp2c9_cluster2_view2.png, width=10cm, dpi=500, ray=1",sep=""))
+
+# Cluster 3
+pymol_cluster = c()
+pymol_cluster <- append(pymol_cluster, "set_color #B2258E, [178,37,142]")
+pymol_cluster <- append(pymol_cluster, paste("create cluster, CYP2C9 and resi ",gsub(", ","+",toString(cluster3)),"", sep= ""))
+pymol_cluster <- append(pymol_cluster, c("hide cartoon, cluster","color #B2258E, cluster","show spheres, cluster")) 
+temp3 = c(pymol_setup,pymol_cluster,cyp2c9_standard_view_1,paste("png ","pymol/1r9o_cyp2c9_cluster3_view1.png, width=10cm, dpi=500, ray=1",sep=""),cyp2c9_standard_view_2, paste("png ","pymol/1r9o_cyp2c9_cluster3_view2.png, width=10cm, dpi=500, ray=1",sep=""))
+
+# Cluster 4
+pymol_cluster = c()
+pymol_cluster <- append(pymol_cluster, "set_color #F0027E, [240,2,126]")
+pymol_cluster <- append(pymol_cluster, paste("create cluster, CYP2C9 and resi ",gsub(", ","+",toString(cluster4)),"", sep= ""))
+pymol_cluster <- append(pymol_cluster, c("hide cartoon, cluster","color #F0027E, cluster","show spheres, cluster")) 
+temp4 = c(pymol_setup,pymol_cluster,cyp2c9_standard_view_1,paste("png ","pymol/1r9o_cyp2c9_cluster4_view1.png, width=10cm, dpi=500, ray=1",sep=""),cyp2c9_standard_view_2, paste("png ","pymol/1r9o_cyp2c9_cluster4_view2.png, width=10cm, dpi=500, ray=1",sep=""))
+
+# Cluster 5
+pymol_cluster = c()
+pymol_cluster <- append(pymol_cluster, "set_color #CE3D38, [206,61,56]")
+pymol_cluster <- append(pymol_cluster, paste("create cluster, CYP2C9 and resi ",gsub(", ","+",toString(cluster5)),"", sep= ""))
+pymol_cluster <- append(pymol_cluster, c("hide cartoon, cluster","color #CE3D38, cluster","show spheres, cluster")) 
+temp5 = c(pymol_setup,pymol_cluster,cyp2c9_standard_view_1,paste("png ","pymol/1r9o_cyp2c9_cluster5_view1.png, width=10cm, dpi=500, ray=1",sep=""),cyp2c9_standard_view_2, paste("png ","pymol/1r9o_cyp2c9_cluster5_view2.png, width=10cm, dpi=500, ray=1",sep=""))
+
+# Cluster 6
+pymol_cluster = c()
+pymol_cluster <- append(pymol_cluster, "set_color #C07C17, [192,124,23]")
+pymol_cluster <- append(pymol_cluster, paste("create cluster, CYP2C9 and resi ",gsub(", ","+",toString(cluster6)),"", sep= ""))
+pymol_cluster <- append(pymol_cluster, c("hide cartoon, cluster","color #C07C17, cluster","show spheres, cluster")) 
+temp6 = c(pymol_setup,pymol_cluster,cyp2c9_standard_view_1,paste("png ","pymol/1r9o_cyp2c9_cluster6_view1.png, width=10cm, dpi=500, ray=1",sep=""),cyp2c9_standard_view_2, paste("png ","pymol/1r9o_cyp2c9_cluster6_view2.png, width=10cm, dpi=500, ray=1",sep=""))
+
+fileConn<-file("output/pymol_cyp2c9_clusters.pml")
+writeLines(c(temp1, temp2, temp3, temp4, temp5, temp6), fileConn)
+close(fileConn)
+
+```
+
+
+### GnomAD/CPIC data processing/analysis
+```{r human_data_stats}
+# Load in CYP2C9 gnomAD data (collapsed by protein consequence, includes stop-gained and synonymous), as well as CPIC clinical recommendations for CYP2C9 star alleles
+human_data = read.table(file = "data/CYP2C9_human_variant_data.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+
+# Basic gnomAD stats
+gnomad_data = subset(human_data, !is.na(Gnomad_Annotation))
+print(paste("Number of total gnomAD variants: ", nrow(gnomad_data)))
+print(paste("Number of gnomAD missense alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="missense_variant")),sep=""))
+print(paste("Number of gnomAD synonymous alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="synonymous_variant")),sep=""))
+print(paste("Number of gnomAD nonsense alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="stop_gained")),sep=""))
+print(paste("Number of singleton gnomAD missense alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="missense_variant" & Gnomad_Allele.Count ==1)),sep=""))
+
+# CPIC stats for star alleles
+cpic_data = subset(human_data, !is.na(CPIC_functional_status))
+cpic_data$CPIC_functional_status = factor(cpic_data$CPIC_functional_status, levels=c("normal function", "decreased function", "no function","uncertain function", "unknown function"))
+print(paste("Number of CYP2C9 star alleles with CPIC class: ", nrow(subset(cpic_data, CPIC_functional_status %in% c("normal function", "decreased function", "no function")))))
+
+print(paste("Number of gnomAD missense variants without CPIC class: ", nrow(subset(human_data, Gnomad_Annotation == "missense_variant" & !CPIC_functional_status %in% c("normal function", "decreased function", "no function"))))) #439
+
+# Combine with activity and abundance scores
+CYP2C9_data_small = CYP2C9_data[,c("variant","class","activity_class","activity_score","activity_sd","abundance_class","abundance_score","abundance_sd")]
+# merge human variant data with activity and abundance scores
+merged_human_scores = join(human_data,CYP2C9_data_small, by="variant", type="left")
+# fix factoring for later plotting
+merged_human_scores$activity_class = factor(merged_human_scores$activity_class, levels=c("increased", "wt-like", "possibly_wt-like", "possibly_decreased", "decreased", "possibly_nonsense-like","nonsense-like"))
+merged_human_scores$abundance_class = factor(merged_human_scores$abundance_class, levels=c("increased", "wt-like", "possibly_wt-like", "possibly_decreased", "decreased", "possibly_nonsense-like","nonsense-like"))
+
+# Analysis of gnomAD synonymous variants
+merged_gnomad_scores_syn = subset(merged_human_scores,Gnomad_Annotation=="synonymous_variant")
+print(paste("Number of GnomAD synonymous alleles with an activity or abundance score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(activity_class) & is.na(abundance_class))))))
+print(paste("Number of GnomAD synonymous alleles with an activity score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(activity_class))))))
+print(paste("Number of GnomAD synonymous alleles a WT-like or possible WT-like activity class:", nrow(subset(merged_gnomad_scores_syn,activity_class=="wt-like"| activity_class=="possibly_wt-like"))))
+print(paste("Number of GnomAD synonymous alleles with an abundance score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(abundance_class))))))
+print(paste("Number of GnomAD synonymous alleles a WT-like or possible WT-like abundance class:", nrow(subset(merged_gnomad_scores_syn,abundance_class=="wt-like"| abundance_class=="possibly_wt-like"))))
+
+# Analysis of gnomAD nonsense variants
+merged_gnomad_scores_non = subset(merged_human_scores,Gnomad_Annotation=="stop_gained")
+print(paste("Number of GnomAD nonsense alleles with an activity or abundance score:", nrow(subset(merged_gnomad_scores_non, !(is.na(activity_class) & is.na(abundance_class))))))
+print(paste("Number of GnomAD nonsense alleles with an activity score:", nrow(subset(merged_gnomad_scores_non, !(is.na(activity_class))))))
+print(paste("Number of GnomAD nonsense alleles a WT-like or possible WT-like activity class:", nrow(subset(merged_gnomad_scores_non,activity_class=="nonsense-like"| activity_class=="possibly_nonsense-like"))))
+print(paste("Number of GnomAD nonsense alleles with an abundance score:", nrow(subset(merged_gnomad_scores_non, !(is.na(abundance_class))))))
+print(paste("Number of GnomAD nonsense alleles a WT-like or possible WT-like abundance class:", nrow(subset(merged_gnomad_scores_non,abundance_class=="nonsense-like"| abundance_class=="possibly_nonsense-like"))))
+
+# Analysis of gnomAD missense variants
+merged_gnomad_scores_missense = subset(merged_human_scores,Gnomad_Annotation=="missense_variant")
+print(paste("Number of GnomAD missense alleles with an activity score:", sum(!is.na(merged_gnomad_scores_missense$activity_score))))
+summary(subset(merged_gnomad_scores_missense,!is.na(activity_score))$activity_class)
+print(paste("Number of singleton GnomAD missense alleles with an activity score:", sum(!is.na(subset(merged_gnomad_scores_missense,Gnomad_Allele.Count==1)$activity_score))))
+summary(subset(merged_gnomad_scores_missense,!is.na(activity_score)&Gnomad_Allele.Count==1)$activity_class)
+print(paste("Number of GnomAD missense alleles with an abundance score:", sum(!is.na(merged_gnomad_scores_missense$abundance_score))))
+summary(subset(merged_gnomad_scores_missense,!is.na(abundance_score))$abundance_class)
+print(paste("Number of GnomAD missense alleles with activity and abundance score:",nrow(subset(merged_gnomad_scores_missense,!is.na(activity_score) & !is.na(abundance_score)))))
+
+```
+
+```{r gnomAD_figures}
+# Plot activity vs abundance score, colored by type of gnomAD variant type
+gnomad_score_scatter = ggplot(subset(merged_human_scores,!is.na(Gnomad_Annotation)), aes(x=abundance_score,y=activity_score)) +
+  geom_point(aes(fill=Gnomad_Annotation),color="black",shape=21,size=1.5,na.rm = TRUE,alpha=0.75) +
+  scale_fill_manual(name = "Variant type", values=c("synonymous_variant"="red","stop_gained"="blue","missense_variant"="grey60"),
+                    labels=c("Missense","Nonsense","Synonymous")) +
+  scale_y_continuous(expand=c(0,0),limits=c(-0.1,1.3)) + ylab("Activity score") +
+  scale_x_continuous(expand=c(0,0),limits=c(-0.1,1.4)) + xlab("Abundance score") +
+  theme_classic() +
+  theme(axis.text = element_text(color = "black",size=8),
+        axis.ticks = element_line(color="black"),
+        axis.title = element_text(color = "black",size=9),
+        legend.key.width=unit(0.1,"cm"),
+        legend.title=element_text(size=9),
+        legend.text=element_text(size=8),
+        legend.margin = margin(0, 0, 0, 0))
+gnomad_score_scatter
+ggsave(filename="output/SF9_gnomad_activity_vs_abundance_figure.pdf",plot=gnomad_score_scatter,device = "pdf",width=11,height=7,units = "cm")
+
+# plot GnomAD allele frequency colored by activity score
+gnomad_freq_plot = ggplot(data=merged_gnomad_scores_missense %>%
+                            arrange(desc(is.na(activity_class))),
+                          aes(x=position, y=Gnomad_Allele.Frequency)) + 
+  geom_point(aes(fill=activity_class, color=ifelse(!is.na(activity_class),"black","grey60")),shape=21,alpha=0.85,size=2) + 
+  geom_text_repel(aes(label=ifelse(Gnomad_Allele.Frequency>3e-4,as.character(Star_allele),'')), size=2,color = "black") + 
+  scale_y_log10(breaks=c(1e-2,1e-3,1e-4,1e-5)) + 
+  scale_x_continuous(expand=c(0,0),limits=c(0,493),breaks=seq(0,480,20)) + 
+  scale_color_manual(values = c("black", "grey60"),guide=FALSE) + 
+  scale_fill_manual(name = "Activity class",values = custom_colorscale,na.value="grey60", 
+                    labels=c("Increased", "WT-like", "Possibly WT-like", "Possibly decreased", "Decreased", "Possibly\nnonsense-like","Nonsense-like")) + 
+  xlab("Position") + ylab("GnomAD allele frequency") +
+  theme_classic() + 
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color="black"),
+        axis.title = element_text(color = "black",size=8),
+        legend.key.width=unit(0.1,"cm"),
+        legend.title=element_text(size=8),
+        legend.text=element_text(size=7),
+        legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid'))
+gnomad_freq_plot
+ggsave(filename="output/Fig7_gnomad_activity_vs_freq.pdf",plot=gnomad_freq_plot,device="pdf", width=18.3,height=7,units="cm")
+
+```
+
+```{r CPIC_plots, fig.width=8}
+cpic_colorscale = c("normal function" = "red","decreased function" = "orange","no function" = "blue3","uncertain function" = "grey70","unknown function" = "grey40")
+
+cpic_subset = subset(merged_human_scores,!is.na(CPIC_functional_status))
+cpic_subset$CPIC_functional_status = factor(cpic_subset$CPIC_functional_status, levels=c("unknown function", "uncertain function", "normal function", "decreased function", "no function"))
+
+# Using CPIC (biochemical) functional status, plot vs activity and abundance classes
+cpic_plot_act = ggplot(subset(cpic_subset,!is.na(activity_class)), aes(x=reorder(activity_class,desc(activity_class)))) + 
+  geom_bar(aes(fill=CPIC_functional_status),colour='black',stat="count",alpha=0.75,size=0.5,position="stack", width=0.9) + 
+  theme_classic() + xlab("Activity class") + ylab("Star Alleles") + 
+  scale_fill_manual(name = "CPIC biochemical\nfunctional status",values=cpic_colorscale, 
+                    breaks= c("normal function", "decreased function", "no function","unknown function", "uncertain function"),
+                    labels= c("Normal function", "Decreased function", "No function","Unknown function", "Uncertain function")) + 
+  scale_y_continuous(limits = c(0,28), breaks=seq(0,25,5)) + 
+  scale_x_discrete(labels= c("Nonsense-like", "Decreased", "Possibly decreased","Possibly WT-like", "WT-like", "Increased")) + 
+  theme(axis.text.x = element_text(color="black", angle=45, hjust=1,size=8),
+        axis.text.y = element_text(color = "black",size=8),
+        axis.title = element_text(color="black", size=8),
+        legend.position = "none")
+
+cpic_plot_abun = ggplot(subset(cpic_subset,!is.na(abundance_class)), aes(x=reorder(abundance_class,desc(abundance_class)))) + 
+  geom_bar(aes(fill=CPIC_functional_status),colour='black',stat="count",alpha=0.75,size=0.5,position="stack", width=0.9) + 
+  theme_classic() + xlab("Abundance class") + ylab("Star Alleles") + 
+  scale_fill_manual(name = "CPIC biochemical\nfunctional status",values=cpic_colorscale, 
+                    breaks= c("normal function", "decreased function", "no function","unknown function", "uncertain function"),
+                    labels= c("Normal function", "Decreased function", "No function","Unknown function", "Uncertain function")) + 
+  scale_y_continuous(limits = c(0,28), breaks=seq(0,25,5)) + 
+  scale_x_discrete(labels= c("Nonsense-like", "Possibly\n nonsense-like", "Decreased", "Possibly decreased","Possibly WT-like", "WT-like")) + 
+  theme(axis.text.x = element_text(color="black", angle=45, hjust=1,size=8),
+        axis.text.y = element_text(color = "black",size=8),
+        axis.title = element_text(color="black", size=8),
+        legend.position = "none")
+
+cpic_legend = get_legend(
+  cpic_plot_act + theme(legend.position = "right",legend.box.margin = margin(0, 0, 0, 0),legend.key.width = unit(0.5, "cm"),legend.justification="top",
+                                 legend.key.height = unit(0.5, "cm"),legend.text=element_text(size=8),legend.title=element_text(size=8))
+)
+combined_cpic_plot = plot_grid(cpic_plot_act,cpic_plot_abun,cpic_legend,
+                               align = 'h', nrow = 1,labels=c("a","b",""), axis="b",
+                               label_size = 12,rel_widths = c(7.25,7.25,3.5))
+combined_cpic_plot
+ggsave(file = "output/Fig6_CPIC_category_histograms.pdf", plot = combined_cpic_plot, device = "pdf", height =7, width = 18,units="cm")
+
+# Get star allele data
+star_allele_data = subset(merged_human_scores,startsWith(Star_allele,'*'))
+star_allele_data = star_allele_data[,c("Star_allele","variant","CPIC_functional_status","activity_score","activity_sd","activity_class")]
+star_allele_data = star_allele_data[order(nchar(star_allele_data$Star_allele),star_allele_data$Star_allele),]
+colnames(star_allele_data) = c("Star allele","variant","CPIC functional status","Activity score","Activity sd","Activity class")
+write.table(star_allele_data, file = "output/Supplementary_table_8_CYP2C9_star_allele_scores.csv", sep = ",", quote = FALSE, row.names = F, col.names = T)
+```
+
+```{r Computational_predictors}
+# Get computational predictors input.
+comp_input <- read.table(file = "data/CYP2C9_computational_predictor_data.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+
+# merge with activity/abundance scores (only those that have at least one score)
+merged_comp_scores = join(CYP2C9_data_small,comp_input, by="variant", type="left")
+
+# plot activity and ahundance vs CADD scores
+cadd_cor1 =  round(cor(merged_comp_scores$CADD_score,merged_comp_scores$activity_score,use="pairwise.complete.obs", method="pearson"),3)
+lb1 = paste("r == ", cadd_cor1)
+cadd_cor2 =  round(cor(merged_comp_scores$CADD_score,merged_comp_scores$abundance_score,use="pairwise.complete.obs", method="pearson"),3)
+lb2 = paste("r == ", cadd_cor2)
+cadd_plot = ggplot() + 
+  geom_point(data =merged_comp_scores,aes(x=activity_score,y=CADD_score,color=CADD_score<20,fill=CADD_score<20), shape=21,na.rm = T,size=0.5,stroke=0.1) + 
+  scale_x_continuous(expand=c(0,0),limits=c(-0.1,1.4), breaks=c(0, 0.5, 1)) + 
+  geom_hline(yintercept = 20,color="black",linetype=2) +
+  scale_colour_manual(values = setNames(alpha(c('black','red'),0.6),c(T, F))) +
+  scale_fill_manual(values = setNames(alpha(c('black','red'),0.4),c(T, F))) +
+  annotate("label", x=0.2, y=3, label=lb1,parse=TRUE,size = 3,fill="grey70",alpha=0.7,label.r=unit(0,"lines"),label.size=NA) + 
+  theme_classic() + xlab("Activity score") + ylab("CADD score") +
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8),
+        legend.position = "none")
+
+cadd_plot2 = ggplot() + 
+  geom_point(data =merged_comp_scores,aes(x=abundance_score,y=CADD_score,color=CADD_score<20,fill=CADD_score<20), shape=21,na.rm = T,size=0.5,stroke=0.1) + 
+  scale_x_continuous(expand=c(0,0),limits=c(-0.35,1.65), breaks=c(0, 0.5, 1, 1.5)) + 
+  geom_hline(yintercept = 20,color="black",linetype=2) +
+  scale_colour_manual(values = setNames(alpha(c('black','red'),0.6),c(T, F))) +
+  scale_fill_manual(values = setNames(alpha(c('black','red'),0.4),c(T, F))) +
+  annotate("label", x=0, y=3, label=lb2,parse=TRUE,size = 3,fill="grey70",alpha=0.7,label.r=unit(0,"lines"),label.size=NA) + 
+  theme_classic() + xlab("Abundance score") + ylab("CADD score") +
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8),
+        legend.position = "none")
+
+# plot activity and ahundance vs PolyPhen2 scores
+pp_cor1 =  round(cor(merged_comp_scores$PolyPhen2_score,merged_comp_scores$activity_score,use="pairwise.complete.obs", method="pearson"),3)
+lb1 = paste("r == ", pp_cor1)
+pp_cor2 =  round(cor(merged_comp_scores$PolyPhen2_score,merged_comp_scores$abundance_score,use="pairwise.complete.obs", method="pearson"),3)
+lb2 = paste("r == ", pp_cor2)
+pp_plot = ggplot() + 
+  geom_point(data =merged_comp_scores,aes(x=activity_score,y=PolyPhen2_score,color=PolyPhen2_score<0.85,fill=PolyPhen2_score<0.85), shape=21,na.rm = T,size=0.5,stroke=0.1) + 
+  scale_x_continuous(expand=c(0,0),limits=c(-0.1,1.4), breaks=c(0, 0.5, 1)) + 
+  geom_hline(yintercept = 0.85,color="black",linetype=2) +
+  scale_colour_manual(values = setNames(alpha(c('black','red'),0.6),c(T, F))) +
+  scale_fill_manual(values = setNames(alpha(c('black','red'),0.4),c(T, F))) +
+  annotate("label", x=0.2, y=0.1, label=lb1,parse=TRUE,size = 3,fill="grey70",alpha=0.7,label.r=unit(0,"lines"),label.size=NA) + 
+  theme_classic() + xlab("Activity score") + ylab("PolyPhen2 score") +
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8),
+        legend.position = "none")
+
+pp_plot2 = ggplot() + 
+  geom_point(data =merged_comp_scores,aes(x=abundance_score,y=PolyPhen2_score,color=PolyPhen2_score<0.85,fill=PolyPhen2_score<0.85), shape=21,na.rm = T,size=0.5,stroke=0.1) + 
+  scale_x_continuous(expand=c(0,0),limits=c(-0.35,1.65), breaks=c(0, 0.5, 1,1.5)) + 
+  geom_hline(yintercept = 0.85,color="black",linetype=2) +
+  scale_colour_manual(values = setNames(alpha(c('black','red'),0.6),c(T, F))) +
+  scale_fill_manual(values = setNames(alpha(c('black','red'),0.4),c(T, F))) +
+  annotate("label", x=0, y=0.1, label=lb2,parse=TRUE,size = 3,fill="grey70",alpha=0.7,label.r=unit(0,"lines"),label.size=NA) + 
+  theme_classic() + xlab("Abundance score") + ylab("PolyPhen2 score") +
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8),
+        legend.position = "none")
+
+# plot activity and ahundance vs SIFT scores
+sift_cor1 =  round(cor(merged_comp_scores$SIFT_score,merged_comp_scores$activity_score,use="pairwise.complete.obs", method="pearson"),3) #0.574
+lb1 = paste("r == ", sift_cor1)
+sift_cor2 =  round(cor(merged_comp_scores$SIFT_score,merged_comp_scores$abundance_score,use="pairwise.complete.obs", method="pearson"),3) #0.507
+lb2 = paste("r == ", sift_cor2)
+sift_plot = ggplot() + 
+  geom_point(data =merged_comp_scores,aes(x=activity_score,y=SIFT_score,color=SIFT_score>0.05,fill=SIFT_score>0.05), shape=21,na.rm = T,size=0.5,stroke=0.1) + 
+  scale_x_continuous(expand=c(0,0),limits=c(-0.1,1.4), breaks=c(0, 0.5, 1)) + 
+  geom_hline(yintercept = 0.05,color="black",linetype=2) +
+  scale_colour_manual(values = setNames(alpha(c('black','red'),0.6),c(T, F))) +
+  scale_fill_manual(values = setNames(alpha(c('black','red'),0.4),c(T, F))) +
+  annotate("label", x=0.2, y=0.9, label=lb1,parse=TRUE,size = 3,fill="grey70",alpha=0.7,label.r=unit(0,"lines"),label.size=NA) + 
+  theme_classic() + xlab("Activity score") + ylab("SIFT score") +
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8),
+        legend.position = "none")
+
+sift_plot2 = ggplot() + 
+  geom_point(data =merged_comp_scores,aes(x=abundance_score,y=SIFT_score,color=SIFT_score>0.05,fill=SIFT_score>0.05), shape=21,na.rm = T,size=0.5,stroke=0.1) + 
+  scale_x_continuous(expand=c(0,0),limits=c(-0.35,1.65), breaks=c(0, 0.5, 1,1.5)) + 
+  geom_hline(yintercept = 0.05,color="black",linetype=2) +
+  scale_colour_manual(values = setNames(alpha(c('black','red'),0.6),c(T, F))) +
+  scale_fill_manual(values = setNames(alpha(c('black','red'),0.4),c(T, F))) +
+  annotate("label", x=0, y=0.9, label=lb2,parse=TRUE,size = 3,fill="grey70",alpha=0.7,label.r=unit(0,"lines"),label.size=NA) + 
+  theme_classic() + xlab("Abundance score") + ylab("SIFT score") +
+  theme(axis.text = element_text(color = "black",size=7),
+        axis.ticks = element_line(color = "black"),
+        axis.title = element_text(color = "black",size=8),
+        legend.position = "none")
+
+# Average correlation of predictors with activity/abundance scores
+print(paste("Mean pearson correlation of CADD, PolyPhen2, and SIFT score with activity score:", round(mean(c(abs(cadd_cor1),abs(pp_cor1),abs(sift_cor1))),3) ))
+print(paste("Mean pearson correlation of CADD, PolyPhen2, and SIFT score with abundance score:", round(mean(c(abs(cadd_cor2),abs(pp_cor2),abs(sift_cor2))),3) ))
+
+computational_plot = plot_grid(cadd_plot,cadd_plot2,pp_plot,pp_plot2,sift_plot,sift_plot2,
+                               align = 'hv', nrow = 3,labels="auto",label_size = 12)
+computational_plot
+ggsave(file = "output/SF10_computational_predictors.pdf", plot = computational_plot, device = "pdf", height =15, width = 18.3,units="cm")
+
+```
+
