@@ -1,6 +1,6 @@
 # CYP2C9 activity and abundance score analysis
 
-This repository houses the analysis pipeline for the manuscript "Massively parallel variant characterization of CYP2C9 enzyme activity and abundance". The "CYP2C9_activity_abundance_analysis.Rmd" R Markdown file is intended to be run with R Studio. This markdown file with analyze the data for the CYP2C9 manuscript, using input files in the "data" folder. The two main input files are the CYP2C9 variant and positional activity and abundance data score tables, "CYP2C9_activity_abundance_scores.csv" and "CYP2C9_activity_abundance_positional_scores.csv", respectively. To run this script, place the "data" folder and all containing files in the same directory as this R Markdown file and allow the analysis to proceed. 
+This repository houses the analysis pipeline for the manuscript "Massively parallel variant characterization of CYP2C9 enzyme activity and abundance". The "CYP2C9_activity_abundance_analysis.Rmd" R Markdown file is intended to be run with R Studio. This markdown file will analyze the data for the CYP2C9 manuscript, using input files in the "data" folder. The two main input files are the CYP2C9 variant and positional activity and abundance data score tables, "CYP2C9_activity_abundance_scores.csv" and "CYP2C9_activity_abundance_positional_scores.csv", respectively. To run this script, place the "data" folder and all containing files in the same directory as this R Markdown file and allow the analysis to proceed. 
 
 Files in the data folder: 
 1. "CYP2C9_activity_abundance_scores.csv"
