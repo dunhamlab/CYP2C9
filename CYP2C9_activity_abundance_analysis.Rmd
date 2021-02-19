@@ -960,7 +960,7 @@ star_allele_data = subset(merged_human_scores,startsWith(Star_allele,'*'))
 star_allele_data = star_allele_data[,c("Star_allele","variant","CPIC_functional_status","activity_score","activity_sd","activity_class")]
 star_allele_data = star_allele_data[order(nchar(star_allele_data$Star_allele),star_allele_data$Star_allele),]
 colnames(star_allele_data) = c("Star allele","variant","CPIC functional status","Activity score","Activity sd","Activity class")
-write.table(star_allele_data, file = "output/Supplementary_table_8_CYP2C9_star_allele_scores.csv", sep = ",", quote = FALSE, row.names = F, col.names = T)
+write.table(star_allele_data, file = "output/Supplementary_table_7_CYP2C9_star_allele_scores.csv", sep = ",", quote = FALSE, row.names = F, col.names = T)
 ```
 
 ```{r Computational_predictors}
