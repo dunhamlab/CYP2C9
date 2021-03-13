@@ -1,7 +1,7 @@
 ---
 title: "CYP2C9 analysis pipeline for activity and abundance scores"
 author: "Clara Amorosi"
-date: "2/11/2021"
+date: "3/12/2021"
 output: html_document
 ---
 
@@ -62,6 +62,7 @@ theme_new = theme_set(theme_classic(base_size = 8))
 ```{r Load_data}
 # scores by variant
 CYP2C9_data = read.table(file = "data/CYP2C9_activity_abundance_scores.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
+
 # median scores by position
 CYP2C9_positions = read.table(file = "data/CYP2C9_activity_abundance_positional_scores.csv", sep = ",", header = TRUE, stringsAsFactors = FALSE)
 ```
@@ -152,6 +153,7 @@ legend = get_legend(
   hist_plot_act + theme(legend.position = "right",legend.box.margin = margin(0, 0, 0, 0))
 )
 ggsave(file = "output/Fig1_activity_histogram_legend.pdf", plot = legend, device = "pdf", height =2.5, width = 3,units="cm")
+print(paste("Total CYP2C9 missense variants with an activity score: ",nrow(subset(CYP2C9_data, class == "missense" & !is.na(activity_score))),sep="" ))
 
 # Plot histogram of abundance scores
 hist_plot_abun = ggplot() + geom_histogram(data = subset(CYP2C9_data, class != "wt"), aes(x = abundance_score,fill=class),
@@ -168,6 +170,7 @@ hist_plot_abun = ggplot() + geom_histogram(data = subset(CYP2C9_data, class != "
   xlab("Abundance score")+ ylab("Count") 
 ggsave(file = "output/Fig3_abundance_histogram.pdf", plot = hist_plot_abun, device = "pdf", height =6.5, width = 9,units="cm")
 hist_plot_abun
+print(paste("Total CYP2C9 missense variants with an abundance score: ",nrow(subset(CYP2C9_data, class == "missense" & !is.na(abundance_score))),sep="" ))
 
 ## making scatterplot of activity/abundance scores, missense variant only, get R-squared
 model = lm(activity_score~abundance_score, subset(CYP2C9_data,class=="missense"))
@@ -316,7 +319,7 @@ bomcc_act = ggplot(merged_validation, aes(x=activity_score, y=bomcc_norm_slope))
   theme(axis.text = element_text(color = "black",size=7),
         axis.ticks = element_line(color = "black"),
         axis.title = element_text(color = "black",size=8))
-ggsave(filename="output/SF5_bomcc_validation.pdf",plot=bomcc_act,width=9,height=6,units="cm")
+ggsave(filename="output/SF6_bomcc_validation.pdf",plot=bomcc_act,width=9,height=6,units="cm")
 bomcc_act
 
 print(paste("Correlation of activity score and BOMCC activity, Pearson's r:",  round(cor(merged_validation$activity_score,merged_validation$bomcc_norm_slope,
@@ -337,7 +340,7 @@ warf_phen = ggplot(merged_validation, aes(x=warf_avg, y=phen_avg)) +
   theme(axis.text = element_text(color = "black",size=7),
         axis.ticks = element_line(color = "black"),
         axis.title = element_text(color = "black",size=8))
-ggsave(filename= "output/SF4_warf_vs_phen_validation.pdf",plot=warf_phen,width=9,height=6,units="cm")
+ggsave(filename= "output/SF5_warf_vs_phen_validation.pdf",plot=warf_phen,width=9,height=6,units="cm")
 warf_phen
 
 print(paste("Correlation of S-warfarin activity and phenytoin activity, Pearson's r:",  round(cor(merged_validation$warf_avg,merged_validation$phen_avg,
@@ -635,6 +638,10 @@ close(fileConn)
 custom_colorscale = c("nonsense-like" = "#BB00FF","possibly_nonsense-like" = "#A47EFF","decreased" = "#3366ff","possibly_decreased" = "#b3d9ff","possibly_wt-like" = "#ffcccc","wt-like" = "#F8766D","increased" = "orange","unknown" = "grey75")
 synonymous_lowest = quantile(subset(CYP2C9_data, class == "synonymous")$activity_score, 0.05, na.rm = TRUE) 
 nonsense_highest = quantile(subset(CYP2C9_data, class == "nonsense" & position < 441)$activity_score, 0.95, na.rm = TRUE)
+summary(as.factor(subset(CYP2C9_data, class == "missense" & !is.na(activity_score))$activity_class))
+print(paste("Number of CYP2C9 missense variants with a significantly decreased activity score: ",nrow(subset(CYP2C9_data, class == "missense" & activity_class %in% c("decreased","possibly_nonsense-like","nonsense-like") )),sep="" ))
+summary(as.factor(subset(CYP2C9_data, class == "missense" & !is.na(abundance_score))$abundance_class))
+print(paste("Number of CYP2C9 missense variants with a significantly decreased abundance score: ",nrow(subset(CYP2C9_data, class == "missense" & abundance_class %in% c("decreased","possibly_nonsense-like","nonsense-like") )),sep="" ))
 
 # Plot stacked histogram of classes for activity score
 category_histogram_act = ggplot() + 
@@ -679,7 +686,21 @@ combined_category_plot = plot_grid(category_histogram_act,category_histogram_abu
                                align = 'h', nrow = 1,labels=c("a","b",""),
                                label_size = 12,rel_widths = c(7.25,7.25,3.5))
 combined_category_plot
-ggsave(file = "output/SF7_score_categorization_histograms.pdf", plot = combined_category_plot, device = "pdf", height =7, width = 18,units="cm")
+ggsave(file = "output/SF4_score_categorization_histograms.pdf", plot = combined_category_plot, device = "pdf", height =7, width = 18,units="cm")
+
+```
+### Active site analysis
+```{r active_site}
+# active site positions from Reynald et al. 2012
+active_site_positions = c(100,104,106,108,113,114,201,204,205,208,209,233,234,237,240,289,292,293,295,296,297,300,301,304,361,362,366,474,476,477,479) #31 positions
+
+print(paste("Median activity score of variants in the active site: ", round(median(subset(CYP2C9_missense, position %in% active_site_positions)$activity_score,na.rm=T),3) ))
+print(paste("Median abundance score of variants in the active site: ", round(median(subset(CYP2C9_missense, position %in% active_site_positions)$abundance_score,na.rm=T),3) ))
+
+# BC loop, based on Wester 2004 structure
+BC_loop = seq(89,115)
+print(paste("Median activity score of variants in the B-C loop: ", round(median(subset(CYP2C9_missense, position %in% BC_loop)$activity_score,na.rm=T),3) ))
+print(paste("Median abundance score of variants in the B-C loop: ", round(median(subset(CYP2C9_missense, position %in% BC_loop)$abundance_score,na.rm=T),3) ))
 
 ```
 
@@ -821,16 +842,13 @@ human_data = read.table(file = "data/CYP2C9_human_variant_data.csv", sep = ",", 
 gnomad_data = subset(human_data, !is.na(Gnomad_Annotation))
 print(paste("Number of total gnomAD variants: ", nrow(gnomad_data)))
 print(paste("Number of gnomAD missense alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="missense_variant")),sep=""))
-print(paste("Number of gnomAD synonymous alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="synonymous_variant")),sep=""))
-print(paste("Number of gnomAD nonsense alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="stop_gained")),sep=""))
 print(paste("Number of singleton gnomAD missense alleles: ", nrow(subset(gnomad_data,Gnomad_Annotation=="missense_variant" & Gnomad_Allele.Count ==1)),sep=""))
 
 # CPIC stats for star alleles
 cpic_data = subset(human_data, !is.na(CPIC_functional_status))
 cpic_data$CPIC_functional_status = factor(cpic_data$CPIC_functional_status, levels=c("normal function", "decreased function", "no function","uncertain function", "unknown function"))
-print(paste("Number of CYP2C9 star alleles with CPIC class: ", nrow(subset(cpic_data, CPIC_functional_status %in% c("normal function", "decreased function", "no function")))))
-
-print(paste("Number of gnomAD missense variants without CPIC class: ", nrow(subset(human_data, Gnomad_Annotation == "missense_variant" & !CPIC_functional_status %in% c("normal function", "decreased function", "no function"))))) #439
+print(paste("Number of CYP2C9 star alleles with functional recommendation: ", nrow(subset(cpic_data, CPIC_functional_status %in% c("normal function", "decreased function", "no function")))))
+print(paste("Number of CYP2C9 star alleles with functional recommendation that are also in gnomAD: ", nrow(subset(human_data, !is.na(Gnomad_Annotation) & CPIC_functional_status %in% c("normal function", "decreased function", "no function")))))
 
 # Combine with activity and abundance scores
 CYP2C9_data_small = CYP2C9_data[,c("variant","class","activity_class","activity_score","activity_sd","abundance_class","abundance_score","abundance_sd")]
@@ -839,32 +857,38 @@ merged_human_scores = join(human_data,CYP2C9_data_small, by="variant", type="lef
 # fix factoring for later plotting
 merged_human_scores$activity_class = factor(merged_human_scores$activity_class, levels=c("increased", "wt-like", "possibly_wt-like", "possibly_decreased", "decreased", "possibly_nonsense-like","nonsense-like"))
 merged_human_scores$abundance_class = factor(merged_human_scores$abundance_class, levels=c("increased", "wt-like", "possibly_wt-like", "possibly_decreased", "decreased", "possibly_nonsense-like","nonsense-like"))
+print(paste("Number of total gnomAD variants with an activity or abundance score: ", nrow(subset(merged_human_scores, !is.na(Gnomad_Annotation) & !(is.na(activity_class) & is.na(abundance_class)))) ))
+merged_human_scores_full = join(human_data,CYP2C9_data_small, by="variant", type="right")
+print(paste("Number of missense variants not in gnomAD with an activity score, without a CPIC class: ", nrow(subset(merged_human_scores_full, class== "missense" & is.na(Gnomad_Annotation)  & !is.na(activity_class) & !CPIC_functional_status %in% c("normal function", "decreased function", "no function"))))) #
 
 # Analysis of gnomAD synonymous variants
 merged_gnomad_scores_syn = subset(merged_human_scores,Gnomad_Annotation=="synonymous_variant")
-print(paste("Number of GnomAD synonymous alleles with an activity or abundance score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(activity_class) & is.na(abundance_class))))))
-print(paste("Number of GnomAD synonymous alleles with an activity score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(activity_class))))))
-print(paste("Number of GnomAD synonymous alleles a WT-like or possible WT-like activity class:", nrow(subset(merged_gnomad_scores_syn,activity_class=="wt-like"| activity_class=="possibly_wt-like"))))
-print(paste("Number of GnomAD synonymous alleles with an abundance score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(abundance_class))))))
-print(paste("Number of GnomAD synonymous alleles a WT-like or possible WT-like abundance class:", nrow(subset(merged_gnomad_scores_syn,abundance_class=="wt-like"| abundance_class=="possibly_wt-like"))))
+print(paste("Number of gnomAD synonymous alleles with an activity or abundance score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(activity_class) & is.na(abundance_class))))))
+print(paste("Number of gnomAD synonymous alleles with an activity score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(activity_class))))))
+print(paste("Number of gnomAD synonymous alleles a WT-like or possible WT-like activity class:", nrow(subset(merged_gnomad_scores_syn,activity_class=="wt-like"| activity_class=="possibly_wt-like"))))
+print(paste("Number of gnomAD synonymous alleles with an abundance score:", nrow(subset(merged_gnomad_scores_syn, !(is.na(abundance_class))))))
+print(paste("Number of gnomAD synonymous alleles a WT-like or possible WT-like abundance class:", nrow(subset(merged_gnomad_scores_syn,abundance_class=="wt-like"| abundance_class=="possibly_wt-like"))))
 
 # Analysis of gnomAD nonsense variants
 merged_gnomad_scores_non = subset(merged_human_scores,Gnomad_Annotation=="stop_gained")
-print(paste("Number of GnomAD nonsense alleles with an activity or abundance score:", nrow(subset(merged_gnomad_scores_non, !(is.na(activity_class) & is.na(abundance_class))))))
-print(paste("Number of GnomAD nonsense alleles with an activity score:", nrow(subset(merged_gnomad_scores_non, !(is.na(activity_class))))))
-print(paste("Number of GnomAD nonsense alleles a WT-like or possible WT-like activity class:", nrow(subset(merged_gnomad_scores_non,activity_class=="nonsense-like"| activity_class=="possibly_nonsense-like"))))
-print(paste("Number of GnomAD nonsense alleles with an abundance score:", nrow(subset(merged_gnomad_scores_non, !(is.na(abundance_class))))))
-print(paste("Number of GnomAD nonsense alleles a WT-like or possible WT-like abundance class:", nrow(subset(merged_gnomad_scores_non,abundance_class=="nonsense-like"| abundance_class=="possibly_nonsense-like"))))
+print(paste("Number of gnomAD nonsense alleles with an activity or abundance score:", nrow(subset(merged_gnomad_scores_non, !(is.na(activity_class) & is.na(abundance_class))))))
+print(paste("Number of gnomAD nonsense alleles with an activity score:", nrow(subset(merged_gnomad_scores_non, !(is.na(activity_class))))))
+print(paste("Number of gnomAD nonsense alleles a nonsense-like or possible nonsense-like activity class:", nrow(subset(merged_gnomad_scores_non,activity_class=="nonsense-like"| activity_class=="possibly_nonsense-like"))))
+print(paste("Number of gnomAD nonsense alleles with an abundance score:", nrow(subset(merged_gnomad_scores_non, !(is.na(abundance_class))))))
+print(paste("Number of gnomAD nonsense alleles a nonsense-like or possible nonsense-like abundance class:", nrow(subset(merged_gnomad_scores_non,abundance_class=="nonsense-like"| abundance_class=="possibly_nonsense-like"))))
 
 # Analysis of gnomAD missense variants
 merged_gnomad_scores_missense = subset(merged_human_scores,Gnomad_Annotation=="missense_variant")
-print(paste("Number of GnomAD missense alleles with an activity score:", sum(!is.na(merged_gnomad_scores_missense$activity_score))))
+print(paste("Number of gnomAD missense alleles with an activity or abundance score:", nrow(subset(merged_gnomad_scores_missense, !(is.na(activity_class) & is.na(abundance_class))))))
+print(paste("Number of gnomAD missense alleles with an activity score:", sum(!is.na(merged_gnomad_scores_missense$activity_score))))
 summary(subset(merged_gnomad_scores_missense,!is.na(activity_score))$activity_class)
-print(paste("Number of singleton GnomAD missense alleles with an activity score:", sum(!is.na(subset(merged_gnomad_scores_missense,Gnomad_Allele.Count==1)$activity_score))))
+print(paste("Number of gnomAD missense variants with an activity score, without a CPIC class: ", nrow(subset(merged_gnomad_scores_missense, !is.na(activity_class) & !CPIC_functional_status %in% c("normal function", "decreased function", "no function"))))) #319
+
+print(paste("Number of singleton gnomAD missense alleles with an activity score:", sum(!is.na(subset(merged_gnomad_scores_missense,Gnomad_Allele.Count==1)$activity_score))))
 summary(subset(merged_gnomad_scores_missense,!is.na(activity_score)&Gnomad_Allele.Count==1)$activity_class)
-print(paste("Number of GnomAD missense alleles with an abundance score:", sum(!is.na(merged_gnomad_scores_missense$abundance_score))))
+print(paste("Number of gnomAD missense alleles with an abundance score:", sum(!is.na(merged_gnomad_scores_missense$abundance_score))))
 summary(subset(merged_gnomad_scores_missense,!is.na(abundance_score))$abundance_class)
-print(paste("Number of GnomAD missense alleles with activity and abundance score:",nrow(subset(merged_gnomad_scores_missense,!is.na(activity_score) & !is.na(abundance_score)))))
+print(paste("Number of gnomAD missense alleles with botha an activity and abundance score:",nrow(subset(merged_gnomad_scores_missense,!is.na(activity_score) & !is.na(abundance_score)))))
 
 ```
 
@@ -887,7 +911,7 @@ gnomad_score_scatter = ggplot(subset(merged_human_scores,!is.na(Gnomad_Annotatio
 gnomad_score_scatter
 ggsave(filename="output/SF9_gnomad_activity_vs_abundance_figure.pdf",plot=gnomad_score_scatter,device = "pdf",width=11,height=7,units = "cm")
 
-# plot GnomAD allele frequency colored by activity score
+# plot gnomAD allele frequency colored by activity score
 gnomad_freq_plot = ggplot(data=merged_gnomad_scores_missense %>%
                             arrange(desc(is.na(activity_class))),
                           aes(x=position, y=Gnomad_Allele.Frequency)) + 
