@@ -1,7 +1,7 @@
 ---
 title: "CYP2C9 analysis pipeline for activity and abundance scores"
 author: "Clara Amorosi"
-date: "3/12/2021"
+date: "6/22/2021"
 output: html_document
 ---
 
@@ -288,9 +288,9 @@ phen_activity = ggplot(merged_validation, aes(x=activity_score, y=phen_avg)) +
 
 # Combined activity validation plot
 combined_act_plot = plot_grid(warf_activity,phen_activity,
-                               align = 'h', nrow = 1,labels=c("a","b"),
-                               label_size = 12)
-ggsave(filename= "output/Fig2_validation_activity_plot.pdf",plot=combined_act_plot,width=18,height=7,units="cm")
+                               align = 'h', nrow = 1,labels=c("A","B"),
+                               label_size = 10)
+ggsave(filename= "output/Fig2_validation_activity_plot_final.pdf",plot=combined_act_plot,width=17.4,height=7,units="cm")
 
 combined_act_plot
 
@@ -689,6 +689,7 @@ combined_category_plot
 ggsave(file = "output/SF4_score_categorization_histograms.pdf", plot = combined_category_plot, device = "pdf", height =7, width = 18,units="cm")
 
 ```
+
 ### Active site analysis
 ```{r active_site}
 # active site positions from Reynald et al. 2012
@@ -701,6 +702,10 @@ print(paste("Median abundance score of variants in the active site: ", round(med
 BC_loop = seq(89,115)
 print(paste("Median activity score of variants in the B-C loop: ", round(median(subset(CYP2C9_missense, position %in% BC_loop)$activity_score,na.rm=T),3) ))
 print(paste("Median abundance score of variants in the B-C loop: ", round(median(subset(CYP2C9_missense, position %in% BC_loop)$abundance_score,na.rm=T),3) ))
+
+conserved_positions = c(354,357,435) #most conserved residues across all CYPs
+print(paste("Number of missense variants at conserved residues: ", nrow(subset(CYP2C9_missense, position %in% conserved_positions & !is.na(activity_score))) ))
+print(paste("Maximum activity score of conserved residues: ", round(max(subset(CYP2C9_missense, position %in% conserved_positions & !is.na(activity_score))$activity_score),3) ))
 
 ```
 
@@ -932,7 +937,7 @@ gnomad_freq_plot = ggplot(data=merged_gnomad_scores_missense %>%
         legend.text=element_text(size=7),
         legend.background = element_rect(colour = 'black', fill = 'white', linetype='solid'))
 gnomad_freq_plot
-ggsave(filename="output/Fig7_gnomad_activity_vs_freq.pdf",plot=gnomad_freq_plot,device="pdf", width=18.3,height=7,units="cm")
+ggsave(filename="output/Fig7_gnomad_activity_vs_freq.pdf",plot=gnomad_freq_plot,device="pdf", width=17.4,height=7,units="cm")
 
 ```
 
@@ -944,40 +949,44 @@ cpic_subset$CPIC_functional_status = factor(cpic_subset$CPIC_functional_status, 
 
 # Using CPIC (biochemical) functional status, plot vs activity and abundance classes
 cpic_plot_act = ggplot(subset(cpic_subset,!is.na(activity_class)), aes(x=reorder(activity_class,desc(activity_class)))) + 
-  geom_bar(aes(fill=CPIC_functional_status),colour='black',stat="count",alpha=0.75,size=0.5,position="stack", width=0.9) + 
+  geom_bar(aes(fill=CPIC_functional_status),colour='black',stat="count",alpha=0.75,size=0.25,position="stack", width=0.9) + 
   theme_classic() + xlab("Activity class") + ylab("Star Alleles") + 
   scale_fill_manual(name = "CPIC biochemical\nfunctional status",values=cpic_colorscale, 
                     breaks= c("normal function", "decreased function", "no function","unknown function", "uncertain function"),
                     labels= c("Normal function", "Decreased function", "No function","Unknown function", "Uncertain function")) + 
   scale_y_continuous(limits = c(0,28), breaks=seq(0,25,5)) + 
   scale_x_discrete(labels= c("Nonsense-like", "Decreased", "Possibly decreased","Possibly WT-like", "WT-like", "Increased")) + 
-  theme(axis.text.x = element_text(color="black", angle=45, hjust=1,size=8),
-        axis.text.y = element_text(color = "black",size=8),
-        axis.title = element_text(color="black", size=8),
+  theme(axis.text.x = element_text(color="black", angle=45, hjust=1,size=6),
+        axis.text.y = element_text(color = "black",size=6),
+        axis.title = element_text(color="black", size=7),
+        axis.line = element_line(colour = 'black', size = 0.25),
+        axis.ticks = element_line(colour = 'black', size = 0.25),
         legend.position = "none")
 
 cpic_plot_abun = ggplot(subset(cpic_subset,!is.na(abundance_class)), aes(x=reorder(abundance_class,desc(abundance_class)))) + 
-  geom_bar(aes(fill=CPIC_functional_status),colour='black',stat="count",alpha=0.75,size=0.5,position="stack", width=0.9) + 
+  geom_bar(aes(fill=CPIC_functional_status),colour='black',stat="count",alpha=0.75,size=0.25,position="stack", width=0.9) + 
   theme_classic() + xlab("Abundance class") + ylab("Star Alleles") + 
   scale_fill_manual(name = "CPIC biochemical\nfunctional status",values=cpic_colorscale, 
                     breaks= c("normal function", "decreased function", "no function","unknown function", "uncertain function"),
                     labels= c("Normal function", "Decreased function", "No function","Unknown function", "Uncertain function")) + 
   scale_y_continuous(limits = c(0,28), breaks=seq(0,25,5)) + 
   scale_x_discrete(labels= c("Nonsense-like", "Possibly\n nonsense-like", "Decreased", "Possibly decreased","Possibly WT-like", "WT-like")) + 
-  theme(axis.text.x = element_text(color="black", angle=45, hjust=1,size=8),
-        axis.text.y = element_text(color = "black",size=8),
-        axis.title = element_text(color="black", size=8),
+  theme(axis.text.x = element_text(color="black", angle=45, hjust=1,size=6),
+        axis.text.y = element_text(color = "black",size=6),
+        axis.title = element_text(color="black", size=7),
+        axis.line = element_line(colour = 'black', size = 0.25),
+        axis.ticks = element_line(colour = 'black', size = 0.25),
         legend.position = "none")
 
 cpic_legend = get_legend(
-  cpic_plot_act + theme(legend.position = "right",legend.box.margin = margin(0, 0, 0, 0),legend.key.width = unit(0.5, "cm"),legend.justification="top",
-                                 legend.key.height = unit(0.5, "cm"),legend.text=element_text(size=8),legend.title=element_text(size=8))
+  cpic_plot_act + theme(legend.position = "right",legend.box.margin = margin(0, 0, 0, 0),legend.key.width = unit(0.3, "cm"),legend.justification="top",
+                                 legend.key.height = unit(0.3, "cm"),legend.text=element_text(size=4.9),legend.title=element_text(size=6.5))
 )
 combined_cpic_plot = plot_grid(cpic_plot_act,cpic_plot_abun,cpic_legend,
-                               align = 'h', nrow = 1,labels=c("a","b",""), axis="b",
-                               label_size = 12,rel_widths = c(7.25,7.25,3.5))
+                               align = 'h', nrow = 1,labels=c("A","B",""), axis="B",
+                               label_size = 9,rel_widths = c(4.6,4.6,2.2))
 combined_cpic_plot
-ggsave(file = "output/Fig6_CPIC_category_histograms.pdf", plot = combined_cpic_plot, device = "pdf", height =7, width = 18,units="cm")
+ggsave(file = "output/Fig6_CPIC_category_histograms.pdf", plot = combined_cpic_plot, device = "pdf", height =4.5, width = 11.4,units="cm")
 
 # Get star allele data
 star_allele_data = subset(merged_human_scores,startsWith(Star_allele,'*'))
@@ -985,6 +994,7 @@ star_allele_data = star_allele_data[,c("Star_allele","variant","CPIC_functional_
 star_allele_data = star_allele_data[order(nchar(star_allele_data$Star_allele),star_allele_data$Star_allele),]
 colnames(star_allele_data) = c("Star allele","variant","CPIC functional status","Activity score","Activity sd","Activity class")
 write.table(star_allele_data, file = "output/Supplementary_table_7_CYP2C9_star_allele_scores.csv", sep = ",", quote = FALSE, row.names = F, col.names = T)
+
 ```
 
 ```{r Computational_predictors}
